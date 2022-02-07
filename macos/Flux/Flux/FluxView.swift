@@ -4,23 +4,21 @@
 //
 //  Created by Sander Melnikov on 05/02/2022.
 //
-
 import ScreenSaver
 import Cocoa
 import OpenGL.GL3
 
 class FluxView: ScreenSaverView {
-    var pixelFormat: NSOpenGLPixelFormat?
-    var openGLContext: NSOpenGLContext?
-    var displayLink: CVDisplayLink?
+    var pixelFormat: NSOpenGLPixelFormat!
+    var openGLContext: NSOpenGLContext!
+    var displayLink: CVDisplayLink!
+    var flux: OpaquePointer!
     var currentTime = Float32(0.0)
-    var flux: OpaquePointer?
-//    var flux: UnsafeMutableRawPointer?
-    var isReady = false
     
-    // MARK: - Init / Setup
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
+        
+        wantsLayer = true;
         
         let attributes: [NSOpenGLPixelFormatAttribute] = [
             UInt32(NSOpenGLPFAAccelerated),
@@ -30,61 +28,50 @@ class FluxView: ScreenSaverView {
             UInt32(NSOpenGLProfileVersion4_1Core),
             UInt32(0)
           ]
-          guard let pixelFormat = NSOpenGLPixelFormat(attributes: attributes) else {
-              print("Pixel format could not be constructed.")
-              return nil
-          }
-          self.pixelFormat = pixelFormat
+        guard let pixelFormat = NSOpenGLPixelFormat(attributes: attributes) else {
+            print("Cannot construct OpenGL pixel format.")
+            return nil
+        }
+        self.pixelFormat = pixelFormat
         guard let context = NSOpenGLContext(format: pixelFormat, share: nil) else {
-            print("Context could not be constructed.")
+            print("Cannot create OpenGL context.")
             return nil
         }
         context.setValues([1], for: .swapInterval)
-        self.openGLContext = context
+        openGLContext = context
         
-        prepareOpenGL()
-        
-        
-//        context.makeCurrentContext()
-//        self.flux = flux_new(0.5)
-        
-//        context.cglContextObj!
-//        self.flux = flux_new(context.cglContextObj!)
-//        UnsafeMutableRawPointer(Unmanaged.passUnretained(context.cglContextObj).toOpaque())
-        
-    
-        
-//        let test = flux_new(32)
-//        flux_animate(1.0)
-        
+        displayLink = makeDisplayLink()
     }
     
     // Debug in app
     required init?(coder decoder: NSCoder) {
-        fatalError("init(coder:) has not been implemented")
+        super.init(coder: decoder)
     }
     
-    func prepareOpenGL() {
-        glClearColor(0.0, 0.0, 0.0, 1.0)
-
-        let displayLinkOutputCallback: CVDisplayLinkOutputCallback = {(displayLink: CVDisplayLink, inNow: UnsafePointer<CVTimeStamp>, inOutputTime: UnsafePointer<CVTimeStamp>, flagsIn: CVOptionFlags, flagsOut: UnsafeMutablePointer<CVOptionFlags>, displayLinkContext: UnsafeMutableRawPointer?) -> CVReturn in
-            let view = unsafeBitCast(displayLinkContext, to: FluxView.self)
-            // Capture the current time in the currentTime property.
-            // view.currentTime = inNow.pointee.videoTime / Int64(inNow.pointee.videoTimeScale)
+      // This is helpful if you need access to window
+//    override func viewDidMoveToSuperview()
+//    {
+//        super.viewDidMoveToSuperview()
+//        if let window = superview?.window {
+//            displayLink = makeDisplayLink()
+//        }
+//    }
+    
+    private func makeDisplayLink() -> CVDisplayLink? {
+        func displayLinkOutputCallback(_ displayLink: CVDisplayLink, _ nowPtr: UnsafePointer<CVTimeStamp>, _ outputTimePtr: UnsafePointer<CVTimeStamp>, _ flagsIn: CVOptionFlags, _ flagsOut: UnsafeMutablePointer<CVOptionFlags>, _ displayLinkContext: UnsafeMutableRawPointer?) -> CVReturn {
             
-            let result = view.drawView()
+            let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
+            _self.animateOneFrame()
 
-            //  We are going to assume that everything went well, and success as the CVReturn
-            return result
+            return kCVReturnSuccess
         }
         
-        CVDisplayLinkCreateWithActiveCGDisplays(&displayLink)
-        CVDisplayLinkSetOutputCallback(displayLink!, displayLinkOutputCallback, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+        var link: CVDisplayLink?
+        CVDisplayLinkCreateWithActiveCGDisplays(&link)
+        CVDisplayLinkSetOutputCallback(link!, displayLinkOutputCallback, UnsafeMutableRawPointer(Unmanaged.passUnretained(self).toOpaque()))
+        CVDisplayLinkSetCurrentCGDisplayFromOpenGLContext(link!, openGLContext!.cglContextObj!, pixelFormat!.cglPixelFormatObj!)
         
-        CVDisplayLinkStart(displayLink!)
-
-        //  Test render
-//        _ = drawView()
+        return link
     }
     
     override func lockFocus() {
@@ -94,73 +81,49 @@ class FluxView: ScreenSaverView {
       }
     }
     
+    override class func backingStoreType() -> NSWindow.BackingStoreType {
+        return NSWindow.BackingStoreType.buffered
+    }
+    
     override func startAnimation() {
-        super.startAnimation()
-//        let size = self.frame.size
-//        self.flux = flux_new(Float(size.width), Float(size.height))
+        // Don’t call super because we’re managing our own timer.
+        
+        lockFocus()
+        openGLContext?.makeCurrentContext()
+        
+        let size = frame.size
+        flux = flux_new(Float(size.width), Float(size.height))
+        
+        CVDisplayLinkStart(displayLink!)
+    }
+    
+    override func stopAnimation() {
+        // Don’t call super. See startAnimation.
+        CVDisplayLinkStop(displayLink!)
     }
 
-    
-    override func draw(_ rect: NSRect) {
-    }
-    
-//    fileprivate
-    func drawView() -> CVReturn {
-        guard let context = self.openGLContext else {
-            Swift.print("Oh god")
-            return kCVReturnError
-        }
+    private func drawView() -> CVReturn {
+        currentTime += 1000.0 * 1.0 / 60.0
 
-        self.currentTime += 1000.0 * 1.0 / 60.0
+        openGLContext.lock()
+        openGLContext.makeCurrentContext()
 
-        context.lock()
-        context.makeCurrentContext()
+        flux_animate(flux!, currentTime)
 
-//        guard let flux = self.flux else {
-//            Swift.print("Oh god")
-//            return kCVReturnError
-//        }
-        if !self.isReady {
-            let size = self.frame.size
-            self.flux = flux_new(Float(size.width), Float(size.height))
-            self.isReady = true
-        }
-
-        flux_animate(self.flux!, self.currentTime)
-
-//        glClearColor(0.0, 0.0, 1.0, 1.0)
-//        glClear(GLbitfield(GL_COLOR_BUFFER_BIT))
-
-
-        context.flushBuffer()
-        context.unlock()
+        openGLContext.flushBuffer()
+        openGLContext.unlock()
 
         return kCVReturnSuccess
-
-
-//        let background = NSBezierPath(rect: bounds)
-//        NSColor.white.setFill()
-//        background.fill()
-
     }
     
     override func animateOneFrame() {
         super.animateOneFrame()
-        if openGLContext!.view != self {
-            openGLContext!.view = self
-          }
         
-        // Is this actually doing anything?
-//        if !CVDisplayLinkIsRunning(displayLink!) {
-//            self.drawView()
-//        }
+        let _ = drawView()
     }
     
     deinit {
-            //  Stop the display link.  A better place to stop the link is in
-            //  the viewController or windowController within functions such as
-            //  windowWillClose(_:)
-            CVDisplayLinkStop(displayLink!)
-//        flux_destroy(self.flux!)
-        }
+        CVDisplayLinkStop(displayLink!)
+        flux_destroy(flux!)
+    }
 }
