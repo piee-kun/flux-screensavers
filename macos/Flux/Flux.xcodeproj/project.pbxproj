@@ -10,16 +10,33 @@
 		C51F82BE27ADD93B00A16374 /* FluxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51F82BD27ADD93B00A16374 /* FluxView.swift */; };
 		C51F82CB27AE132A00A16374 /* libflux.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C51F82CA27AE132A00A16374 /* libflux.a */; };
 		C51F82CF27AE267400A16374 /* flux.h in Headers */ = {isa = PBXBuildFile; fileRef = C51F82CE27AE267400A16374 /* flux.h */; };
+		C5A8D9D327B07DF4000B449F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A8D9D227B07DF4000B449F /* AppDelegate.swift */; };
+		C5A8D9D527B07DF8000B449F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D427B07DF8000B449F /* Assets.xcassets */; };
+		C5A8D9D827B07DF8000B449F /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D627B07DF8000B449F /* MainMenu.xib */; };
 /* End PBXBuildFile section */
 
+/* Begin PBXContainerItemProxy section */
+		C5A8D9DD27B07E09000B449F /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C51F82A627ADD6C100A16374 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = C51F82AE27ADD6C100A16374;
+			remoteInfo = Flux;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileReference section */
-		C51F82AF27ADD6C100A16374 /* Flux.saver */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Flux.saver; sourceTree = BUILT_PRODUCTS_DIR; };
-		C51F82B427ADD6C100A16374 /* FluxView.txt */ = {isa = PBXFileReference; lastKnownFileType = text; path = FluxView.txt; sourceTree = "<group>"; };
 		C51F82BD27ADD93B00A16374 /* FluxView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FluxView.swift; sourceTree = "<group>"; };
 		C51F82BF27ADDE4800A16374 /* Flux-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Flux-Bridging-Header.h"; sourceTree = "<group>"; };
 		C51F82C427AE063C00A16374 /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
 		C51F82CA27AE132A00A16374 /* libflux.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libflux.a; path = "../../../flux/target/x86_64-apple-darwin/release/libflux.a"; sourceTree = "<group>"; };
 		C51F82CE27AE267400A16374 /* flux.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = flux.h; path = "../../../flux/target/x86_64-apple-darwin/release/flux.h"; sourceTree = "<group>"; };
+		C5852E9327B06B9600586B70 /* Flux.saver */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Flux.saver; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5A8D9D027B07DF4000B449F /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		C5A8D9D227B07DF4000B449F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
+		C5A8D9D427B07DF8000B449F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		C5A8D9D727B07DF8000B449F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
+		C5A8D9D927B07DF8000B449F /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -31,32 +48,32 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C5A8D9CD27B07DF4000B449F /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
 		C51F82A527ADD6C100A16374 = {
 			isa = PBXGroup;
 			children = (
-				C51F82BF27ADDE4800A16374 /* Flux-Bridging-Header.h */,
 				C51F82B127ADD6C100A16374 /* Flux */,
-				C51F82B027ADD6C100A16374 /* Products */,
+				C5A8D9D127B07DF4000B449F /* Runner */,
 				C51F82C227AE062500A16374 /* Frameworks */,
+				C5852E9327B06B9600586B70 /* Flux.saver */,
+				C5A8D9D027B07DF4000B449F /* Runner.app */,
 			);
-			sourceTree = "<group>";
-		};
-		C51F82B027ADD6C100A16374 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				C51F82AF27ADD6C100A16374 /* Flux.saver */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 		C51F82B127ADD6C100A16374 /* Flux */ = {
 			isa = PBXGroup;
 			children = (
+				C51F82BF27ADDE4800A16374 /* Flux-Bridging-Header.h */,
 				C51F82BD27ADD93B00A16374 /* FluxView.swift */,
-				C51F82B427ADD6C100A16374 /* FluxView.txt */,
 			);
 			path = Flux;
 			sourceTree = "<group>";
@@ -69,6 +86,17 @@
 				C51F82CE27AE267400A16374 /* flux.h */,
 			);
 			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		C5A8D9D127B07DF4000B449F /* Runner */ = {
+			isa = PBXGroup;
+			children = (
+				C5A8D9D227B07DF4000B449F /* AppDelegate.swift */,
+				C5A8D9D427B07DF8000B449F /* Assets.xcassets */,
+				C5A8D9D627B07DF8000B449F /* MainMenu.xib */,
+				C5A8D9D927B07DF8000B449F /* Runner.entitlements */,
+			);
+			path = Runner;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -100,8 +128,26 @@
 			);
 			name = Flux;
 			productName = Flux;
-			productReference = C51F82AF27ADD6C100A16374 /* Flux.saver */;
+			productReference = C5852E9327B06B9600586B70 /* Flux.saver */;
 			productType = "com.apple.product-type.bundle";
+		};
+		C5A8D9CF27B07DF4000B449F /* Runner */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C5A8D9DA27B07DF8000B449F /* Build configuration list for PBXNativeTarget "Runner" */;
+			buildPhases = (
+				C5A8D9CC27B07DF4000B449F /* Sources */,
+				C5A8D9CD27B07DF4000B449F /* Frameworks */,
+				C5A8D9CE27B07DF4000B449F /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				C5A8D9DE27B07E09000B449F /* PBXTargetDependency */,
+			);
+			name = Runner;
+			productName = Runner;
+			productReference = C5A8D9D027B07DF4000B449F /* Runner.app */;
+			productType = "com.apple.product-type.application";
 		};
 /* End PBXNativeTarget section */
 
@@ -110,11 +156,15 @@
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 1310;
 				LastUpgradeCheck = 1310;
 				TargetAttributes = {
 					C51F82AE27ADD6C100A16374 = {
 						CreatedOnToolsVersion = 13.1;
 						LastSwiftMigration = 1310;
+					};
+					C5A8D9CF27B07DF4000B449F = {
+						CreatedOnToolsVersion = 13.1;
 					};
 				};
 			};
@@ -127,11 +177,12 @@
 				Base,
 			);
 			mainGroup = C51F82A527ADD6C100A16374;
-			productRefGroup = C51F82B027ADD6C100A16374 /* Products */;
+			productRefGroup = C51F82A527ADD6C100A16374;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				C51F82AE27ADD6C100A16374 /* Flux */,
+				C5A8D9CF27B07DF4000B449F /* Runner */,
 			);
 		};
 /* End PBXProject section */
@@ -141,6 +192,15 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C5A8D9CE27B07DF4000B449F /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C5A8D9D527B07DF8000B449F /* Assets.xcassets in Resources */,
+				C5A8D9D827B07DF8000B449F /* MainMenu.xib in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -155,7 +215,34 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		C5A8D9CC27B07DF4000B449F /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				C5A8D9D327B07DF4000B449F /* AppDelegate.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		C5A8D9DE27B07E09000B449F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = C51F82AE27ADD6C100A16374 /* Flux */;
+			targetProxy = C5A8D9DD27B07E09000B449F /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin PBXVariantGroup section */
+		C5A8D9D627B07DF8000B449F /* MainMenu.xib */ = {
+			isa = PBXVariantGroup;
+			children = (
+				C5A8D9D727B07DF8000B449F /* Base */,
+			);
+			name = MainMenu.xib;
+			sourceTree = "<group>";
+		};
+/* End PBXVariantGroup section */
 
 /* Begin XCBuildConfiguration section */
 		C51F82B627ADD6C100A16374 /* Debug */ = {
@@ -209,7 +296,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = YES;
@@ -262,7 +349,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				MACOSX_DEPLOYMENT_TARGET = 10.9;
+				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				MTL_FAST_MATH = YES;
 				SDKROOT = macosx;
@@ -287,12 +374,11 @@
 					"@loader_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "/Users/Sander/Programming/flux/target/x86_64-apple-darwin/release";
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.sandyoo.Flux;
+				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "$(PROJECT_DIR)/Flux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(PROJECT_DIR)/Flux/Flux-Bridging-Header.h";
 				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 				WRAPPER_EXTENSION = saver;
@@ -317,14 +403,75 @@
 					"@loader_path/../Frameworks",
 				);
 				LIBRARY_SEARCH_PATHS = "/Users/Sander/Programming/flux/target/x86_64-apple-darwin/release";
-				MACOSX_DEPLOYMENT_TARGET = 10.10;
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = me.sandyoo.Flux;
+				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
-				SWIFT_OBJC_BRIDGING_HEADER = "$(PROJECT_DIR)/Flux-Bridging-Header.h";
+				SWIFT_OBJC_BRIDGING_HEADER = "$(PROJECT_DIR)/Flux/Flux-Bridging-Header.h";
 				SWIFT_VERSION = 5.0;
 				WRAPPER_EXTENSION = saver;
+			};
+			name = Release;
+		};
+		C5A8D9DB27B07DF8000B449F /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 66STEN75KJ;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = MainMenu;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Runner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		C5A8D9DC27B07DF8000B449F /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Runner/Runner.entitlements;
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 66STEN75KJ;
+				ENABLE_HARDENED_RUNTIME = YES;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				INFOPLIST_KEY_NSMainNibFile = MainMenu;
+				INFOPLIST_KEY_NSPrincipalClass = NSApplication;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MACOSX_DEPLOYMENT_TARGET = 11.6;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Runner;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
@@ -345,6 +492,15 @@
 			buildConfigurations = (
 				C51F82B927ADD6C100A16374 /* Debug */,
 				C51F82BA27ADD6C100A16374 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		C5A8D9DA27B07DF8000B449F /* Build configuration list for PBXNativeTarget "Runner" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				C5A8D9DB27B07DF8000B449F /* Debug */,
+				C5A8D9DC27B07DF8000B449F /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
