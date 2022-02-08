@@ -1,0 +1,26 @@
+[package]
+name = "flux-ffi"
+description = "Foreign function interface for flux"
+version = "0.0.1"
+authors = ["Sander Melnikov <hey@sandydoo.me"]
+repository = "https://github.com/sandydoo/flux-screensavers/"
+publish = false
+license-file = "../LICENSE"
+edition = "2021"
+
+build = "build.rs"
+
+[lib]
+name = "flux"
+crate-type = [ "staticlib", "cdylib" ]
+
+[build-dependencies]
+cbindgen = "0.16.0"
+
+[dependencies]
+flux = { version = "0.1", path = "../../flux/crates/flux" }
+glow = "0.11.2"
+serde_json = "1"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+core-foundation = "0.9"
