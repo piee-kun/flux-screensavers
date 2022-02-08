@@ -8,6 +8,53 @@ import ScreenSaver
 import Cocoa
 import OpenGL.GL3
 
+let SETTINGS = """
+{
+    "viscosity": 0.8,
+    "velocityDissipation": 0.0,
+    "fluidWidth": 128,
+    "fluidHeight": 128,
+    "fluidSimulationFrameRate": 30.0,
+    "diffusionIterations": 30,
+    "pressureIterations": 40,
+    "colorScheme": "Peacock",
+    "lineLength": 180.0,
+    "lineWidth": 6.0,
+    "lineBeginOffset": 0.50,
+    "lineFadeOutLength": 0.05,
+    "springStiffness": 0.2,
+    "springVariance": 0.2,
+    "springMass": 2.5,
+    "springRestLength": 0.0,
+    "advectionDirection": 1.0,
+    "adjustAdvection": 30.0,
+    "gridSpacing": 20,
+    "viewScale": 1.2,
+    "noiseChannel1": {
+        "scale": 1.1,
+        "multiplier": 0.23,
+        "offset1": 2.0,
+        "offset2": 8.0,
+        "offsetIncrement": 0.1,
+        "delay": 4.0,
+        "blendDuration": 4.0,
+        "blendThreshold": 0.3,
+        "blendMethod": "Curl"
+    },
+    "noiseChannel2": {
+        "scale": 15.0,
+        "multiplier": 0.1,
+        "offset1": 1.0,
+        "offset2": 1.0,
+        "offsetIncrement": 0.1,
+        "delay": 0.6,
+        "blendDuration": 0.4,
+        "blendThreshold": 0.1,
+        "blendMethod": "Wiggle"
+    }
+}
+"""
+
 class FluxView: ScreenSaverView {
     var pixelFormat: NSOpenGLPixelFormat!
     var openGLContext: NSOpenGLContext!
@@ -100,7 +147,7 @@ class FluxView: ScreenSaverView {
         openGLContext?.makeCurrentContext()
         
         let size = frame.size
-        flux = flux_new(Float(size.width), Float(size.height))
+        flux = flux_new(Float(size.width), Float(size.height), 2.0, SETTINGS)
         openGLContext?.unlock()
         
         CVDisplayLinkStart(displayLink!)
