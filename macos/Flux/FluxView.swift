@@ -106,7 +106,7 @@ class FluxView: ScreenSaverView {
             
             let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
             let outputTime = outputTimePtr.pointee
-            _self.currentTime += 1000.0 * 1.0 / (outputTime.rateScalar * Float(outputTime.videoTimeScale) / Float(outputTime.videoRefreshPeriod))
+            _self.currentTime += 1000.0 * 1.0 / (Float(outputTime.rateScalar) * Float(outputTime.videoTimeScale) / Float(outputTime.videoRefreshPeriod))
             
             // This stutters for some reason?
             // _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
