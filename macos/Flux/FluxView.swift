@@ -59,7 +59,7 @@ class FluxView: ScreenSaverView {
     var pixelFormat: NSOpenGLPixelFormat!
     var openGLContext: NSOpenGLContext!
     var displayLink: CVDisplayLink!
-    var flux: OpaquePointer!
+    var flux: OpaquePointer?
     var currentTime: Float = 0
     
     override init?(frame: NSRect, isPreview: Bool) {
@@ -147,7 +147,14 @@ class FluxView: ScreenSaverView {
         openGLContext?.makeCurrentContext()
         
         let size = frame.size
-        flux = flux_new(Float(size.width), Float(size.height), 2.0, SETTINGS)
+        guard let flux = flux_new(Float(size.width), Float(size.height), 2.0, SETTINGS) else {
+            // TODO: question the FFI for the last error
+            print("Can’t initialize Flux")
+            openGLContext?.unlock()
+            return
+        }
+        
+        self.flux = flux
         openGLContext?.unlock()
         
         CVDisplayLinkStart(displayLink!)

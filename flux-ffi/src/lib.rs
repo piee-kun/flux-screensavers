@@ -3,6 +3,31 @@ use std::ffi::CStr;
 use std::os::raw::c_char;
 use std::rc::Rc;
 
+fn init_flux(
+    width: f32,
+    height: f32,
+    pixel_ratio: f64,
+    settings_json_ptr: *const c_char,
+) -> Result<Flux, String> {
+    let raw_context = unsafe { glow::Context::from_loader_function(|addr| get_proc_address(addr)) };
+    let context = Box::new(Rc::new(raw_context));
+
+    let settings_json = unsafe { CStr::from_ptr(settings_json_ptr) }
+        .to_str()
+        .map_err(|err| err.to_string())?;
+    let settings: Settings = serde_json::from_str(&settings_json).map_err(|err| err.to_string())?;
+    let settings = Box::new(Rc::new(settings));
+
+    Flux::new(
+        &context,
+        width as u32,
+        height as u32,
+        pixel_ratio,
+        &settings,
+    )
+    .map_err(|err| err.to_string())
+}
+
 #[no_mangle]
 pub extern "C" fn flux_new(
     width: f32,
@@ -10,47 +35,32 @@ pub extern "C" fn flux_new(
     pixel_ratio: f64,
     settings_json_ptr: *const c_char,
 ) -> *mut Flux {
-    let raw_context = unsafe { glow::Context::from_loader_function(|addr| get_proc_address(addr)) };
-    let context = Box::new(Rc::new(raw_context));
+    let flux = match init_flux(width, height, pixel_ratio, settings_json_ptr) {
+        Err(_msg) => {
+            // TODO: log stuff
+            return std::ptr::null_mut();
+        }
+        Ok(flux) => flux,
+    };
 
-    // TODO: can you do error handling with FFI?
-    let settings_c_str = unsafe { CStr::from_ptr(settings_json_ptr) };
-    let settings_slice = settings_c_str.to_str().unwrap();
-    let settings: Settings = serde_json::from_str(&settings_slice).unwrap();
-    let settings = Box::new(Rc::new(settings));
-
-    let raw_ptr = Box::into_raw(Box::new(
-        Flux::new(
-            &context,
-            width as u32,
-            height as u32,
-            pixel_ratio,
-            &settings,
-        )
-        .unwrap(),
-    ));
-    raw_ptr
+    Box::into_raw(Box::new(flux))
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn flux_animate(ptr: *mut Flux, timestamp: f32) {
-    let flux = &mut *ptr;
-    flux.animate(timestamp);
-
-    // TODO: do we need to call forget?
-    // std::mem::forget(flux);
+pub unsafe extern "C" fn flux_animate(flux: *mut Flux, timestamp: f32) {
+    (&mut *flux).animate(timestamp);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn flux_resize(ptr: *mut Flux, logical_width: f32, logical_height: f32) {
-    let flux = &mut *ptr;
-    flux.resize(logical_width as u32, logical_height as u32);
+pub unsafe extern "C" fn flux_resize(flux: *mut Flux, logical_width: f32, logical_height: f32) {
+    (&mut *flux).resize(logical_width as u32, logical_height as u32);
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn flux_destroy(ptr: *mut Flux) {
-    let _flux = Box::from_raw(ptr);
-    // Drop
+pub unsafe extern "C" fn flux_destroy(flux: *mut Flux) {
+    if !flux.is_null() {
+        drop(Box::from_raw(flux));
+    }
 }
 
 #[cfg(target_os = "macos")]
