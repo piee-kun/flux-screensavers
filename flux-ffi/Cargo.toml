@@ -8,14 +8,9 @@ publish = false
 license-file = "../LICENSE"
 edition = "2021"
 
-build = "build.rs"
-
 [lib]
 name = "flux"
 crate-type = [ "staticlib", "cdylib" ]
-
-[build-dependencies]
-cbindgen = "0.16.0"
 
 [dependencies]
 flux = { version = "0.1", path = "../../flux/crates/flux" }
