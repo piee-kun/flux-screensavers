@@ -13,7 +13,7 @@ class FluxView: ScreenSaverView {
     var openGLContext: NSOpenGLContext!
     var displayLink: CVDisplayLink!
     var flux: OpaquePointer!
-    var currentTime = Float32(0.0)
+    var currentTime: Float = 0
     
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
@@ -61,6 +61,16 @@ class FluxView: ScreenSaverView {
         func displayLinkOutputCallback(_ displayLink: CVDisplayLink, _ nowPtr: UnsafePointer<CVTimeStamp>, _ outputTimePtr: UnsafePointer<CVTimeStamp>, _ flagsIn: CVOptionFlags, _ flagsOut: UnsafeMutablePointer<CVOptionFlags>, _ displayLinkContext: UnsafeMutableRawPointer?) -> CVReturn {
             
             let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
+            let outputTime = outputTimePtr.pointee
+            _self.currentTime += 1000.0 * 1.0 / (outputTime.rateScalar * Float(outputTime.videoTimeScale) / Float(outputTime.videoRefreshPeriod))
+            
+            // This stutters for some reason?
+            // _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
+            
+            // Show FPS
+            // let fps = (outputTime.rateScalar * Double(outputTime.videoTimeScale) / Double(outputTime.videoRefreshPeriod))
+            //  print("FPS:\t \(fps)")
+
             _self.animateOneFrame()
 
             return kCVReturnSuccess
@@ -103,12 +113,10 @@ class FluxView: ScreenSaverView {
     }
 
     private func drawView() -> CVReturn {
-        currentTime += 1000.0 * 1.0 / 60.0
-
         openGLContext.lock()
         openGLContext.makeCurrentContext()
 
-        flux_animate(flux!, currentTime)
+        flux_animate(flux, currentTime)
 
         openGLContext.flushBuffer()
         openGLContext.unlock()
