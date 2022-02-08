@@ -8,11 +8,11 @@
 
 /* Begin PBXBuildFile section */
 		C51F82BE27ADD93B00A16374 /* FluxView.swift in Sources */ = {isa = PBXBuildFile; fileRef = C51F82BD27ADD93B00A16374 /* FluxView.swift */; };
+		C59412FA27B209C200D85A3C /* flux.h in Headers */ = {isa = PBXBuildFile; fileRef = C59412F927B209C200D85A3C /* flux.h */; };
+		C59412FC27B20A0A00D85A3C /* libflux.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C59412FB27B20A0A00D85A3C /* libflux.a */; };
 		C5A8D9D327B07DF4000B449F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A8D9D227B07DF4000B449F /* AppDelegate.swift */; };
 		C5A8D9D527B07DF8000B449F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D427B07DF8000B449F /* Assets.xcassets */; };
 		C5A8D9D827B07DF8000B449F /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D627B07DF8000B449F /* MainMenu.xib */; };
-		C5FDB16727B1F9E5002B97BD /* flux.h in Headers */ = {isa = PBXBuildFile; fileRef = C5FDB16527B1F9E5002B97BD /* flux.h */; };
-		C5FDB16827B1F9E5002B97BD /* libflux.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C5FDB16627B1F9E5002B97BD /* libflux.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -30,13 +30,13 @@
 		C51F82BF27ADDE4800A16374 /* Flux-Bridging-Header.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = "Flux-Bridging-Header.h"; sourceTree = "<group>"; };
 		C51F82C427AE063C00A16374 /* libresolv.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libresolv.tbd; path = usr/lib/libresolv.tbd; sourceTree = SDKROOT; };
 		C5852E9327B06B9600586B70 /* Flux.saver */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = Flux.saver; sourceTree = BUILT_PRODUCTS_DIR; };
+		C59412F927B209C200D85A3C /* flux.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; name = flux.h; path = "../flux-ffi/src/flux.h"; sourceTree = "<group>"; };
+		C59412FB27B20A0A00D85A3C /* libflux.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libflux.a; path = "../flux-ffi/target/x86_64-apple-darwin/release/libflux.a"; sourceTree = "<group>"; };
 		C5A8D9D027B07DF4000B449F /* Runner.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Runner.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		C5A8D9D227B07DF4000B449F /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		C5A8D9D427B07DF8000B449F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C5A8D9D727B07DF8000B449F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		C5A8D9D927B07DF8000B449F /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
-		C5FDB16527B1F9E5002B97BD /* flux.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = flux.h; sourceTree = "<group>"; };
-		C5FDB16627B1F9E5002B97BD /* libflux.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; path = libflux.a; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,7 +44,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C5FDB16827B1F9E5002B97BD /* libflux.a in Frameworks */,
+				C59412FC27B20A0A00D85A3C /* libflux.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,8 +81,8 @@
 		C51F82C227AE062500A16374 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				C5FDB16527B1F9E5002B97BD /* flux.h */,
-				C5FDB16627B1F9E5002B97BD /* libflux.a */,
+				C59412FB27B20A0A00D85A3C /* libflux.a */,
+				C59412F927B209C200D85A3C /* flux.h */,
 				C51F82C427AE063C00A16374 /* libresolv.tbd */,
 			);
 			name = Frameworks;
@@ -106,7 +106,7 @@
 			isa = PBXHeadersBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C5FDB16727B1F9E5002B97BD /* flux.h in Headers */,
+				C59412FA27B209C200D85A3C /* flux.h in Headers */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -374,10 +374,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"/Users/Sander/Programming/flux/target/x86_64-apple-darwin/release",
-					"$(PROJECT_DIR)",
-				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/target/x86_64-apple-darwin/release";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -406,10 +403,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = (
-					"/Users/Sander/Programming/flux/target/x86_64-apple-darwin/release",
-					"$(PROJECT_DIR)",
-				);
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/target/x86_64-apple-darwin/release";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.Flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
