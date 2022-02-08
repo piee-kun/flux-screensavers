@@ -15,8 +15,7 @@ class AppDelegate: NSObject {
     
     var view: ScreenSaverView!
 
-    func setupAndStartAnimation()
-    {
+    func setupAndStartAnimation() {
         let saverName = UserDefaults.standard.string(forKey: "saver") ?? "Flux"
         guard let saverBundle = loadSaverBundle(saverName) else {
             NSLog("Can't find or load bundle for saver named \(saverName).")
@@ -25,71 +24,63 @@ class AppDelegate: NSObject {
         let saverClass = saverBundle.principalClass! as! ScreenSaverView.Type
         
         view = saverClass.init(frame: window.contentView!.frame, isPreview: false)
-        view.autoresizingMask = [NSView.AutoresizingMask.width, NSView.AutoresizingMask.height]
 
         window.backingType = saverClass.backingStoreType()
-        window.title = view.className
-        window.contentView!.autoresizesSubviews = true
+        window.title = "Flux"
+        // Don’t autoresize! We need to “detach” the view from OpenGL first.
+        window.contentView!.autoresizesSubviews = false
         window.contentView!.addSubview(view)
 
         view.startAnimation()
     }
 
-    private func loadSaverBundle(_ name: String) -> Bundle?
-    {
+    private func loadSaverBundle(_ name: String) -> Bundle? {
         let myBundle = Bundle(for: AppDelegate.self)
         let saverBundleURL = myBundle.bundleURL.deletingLastPathComponent().appendingPathComponent("\(name).saver", isDirectory: true)
-        Swift.print(saverBundleURL)
+//        let saverBundleURL = URL(fileURLWithPath: "/System/Library/Screen Savers/Drift.saver", isDirectory: true)
         let saverBundle = Bundle(url: saverBundleURL)
         saverBundle?.load()
         return saverBundle
     }
 
-    func restartAnimation()
-    {
+    func restartAnimation() {
         if view.isAnimating {
             view.stopAnimation()
         }
         view.startAnimation()
     }
 
-    @IBAction func showPreferences(_ sender: NSObject!)
-    {
+    @IBAction func showPreferences(_ sender: NSObject!) {
         window.beginSheet(view.configureSheet!, completionHandler: nil)
     }
-
 }
 
-extension AppDelegate: NSApplicationDelegate
-{
-    func applicationDidFinishLaunching(_ aNotification: Notification)
-    {
+extension AppDelegate: NSApplicationDelegate {
+    func applicationDidFinishLaunching(_ aNotification: Notification) {
+        // Watch for resize events
+        NotificationCenter.default.addObserver(self, selector: #selector(NSWindowDelegate.windowDidResize(_:)), name: NSWindow.didResizeNotification, object: window)
+        
         setupAndStartAnimation()
     }
+    
+    //    func applicationWillTerminate(_ aNotification: Notification) {
+    //        // Insert code here to tear down your application
+    //    }
 }
 
 
-extension AppDelegate: NSWindowDelegate
-{
-    func windowWillClose(_ notification: Notification)
-    {
+extension AppDelegate: NSWindowDelegate {
+    func windowWillClose(_ notification: Notification) {
         NSApplication.shared.terminate(window)
     }
 
-    func windowDidResize(_ notification: Notification)
-    {
+    func windowDidResize(_ notification: Notification) {
+        let window = notification.object as! NSWindow
+        // TODO: whats the old size?
+        view.resizeSubviews(withOldSize: window.frame.size)
     }
 
-    func windowDidEndSheet(_ notification: Notification)
-    {
+    func windowDidEndSheet(_ notification: Notification) {
         restartAnimation()
     }
 }
-
-//    func applicationWillTerminate(_ aNotification: Notification) {
-//        // Insert code here to tear down your application
-//    }
-//
-//    func applicationSupportsSecureRestorableState(_ app: NSApplication) -> Bool {
-//        return true
-//    }

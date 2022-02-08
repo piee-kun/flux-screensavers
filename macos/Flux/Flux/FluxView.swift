@@ -126,4 +126,24 @@ class FluxView: ScreenSaverView {
         CVDisplayLinkStop(displayLink!)
         flux_destroy(flux!)
     }
+    
+    // The docs say I can override `resize`, but it’s not called...
+    override func resizeSubviews(withOldSize oldSize: NSSize) {
+        super.resizeSubviews(withOldSize: oldSize)
+        
+        let size = window!.frame.size
+        
+        // Detach the view from the OpenGL context, otherwise resizing breaks.
+        // Lock things just in case
+        openGLContext.lock()
+        openGLContext.view = nil
+        
+        // First resize the frame
+        setFrameSize(window!.frame.size)
+        // Next resize the GL app
+        flux_resize(flux, Float(size.width), Float(size.height))
+        
+        openGLContext.view = self
+        openGLContext.unlock()
+    }
 }
