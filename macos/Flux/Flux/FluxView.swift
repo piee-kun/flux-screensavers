@@ -18,15 +18,13 @@ class FluxView: ScreenSaverView {
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
         
-        wantsLayer = true;
-        
         let attributes: [NSOpenGLPixelFormatAttribute] = [
-            UInt32(NSOpenGLPFAAccelerated),
-            UInt32(NSOpenGLPFADoubleBuffer),
-            UInt32(NSOpenGLPFAColorSize), UInt32(32),
-            UInt32(NSOpenGLPFAOpenGLProfile),
-            UInt32(NSOpenGLProfileVersion4_1Core),
-            UInt32(0)
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFAAccelerated),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFADoubleBuffer),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFAColorSize), 32,
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFAOpenGLProfile),
+            NSOpenGLPixelFormatAttribute(NSOpenGLProfileVersion3_2Core),
+            0
           ]
         guard let pixelFormat = NSOpenGLPixelFormat(attributes: attributes) else {
             print("Cannot construct OpenGL pixel format.")
@@ -48,9 +46,8 @@ class FluxView: ScreenSaverView {
         super.init(coder: decoder)
     }
     
-      // This is helpful if you need access to window
-//    override func viewDidMoveToSuperview()
-//    {
+    // This is helpful if you need access to window
+//    override func viewDidMoveToSuperview() {
 //        super.viewDidMoveToSuperview()
 //        if let window = superview?.window {
 //            displayLink = makeDisplayLink()
@@ -99,10 +96,12 @@ class FluxView: ScreenSaverView {
         // Don’t call super because we’re managing our own timer.
         
         lockFocus()
+        openGLContext?.lock()
         openGLContext?.makeCurrentContext()
         
         let size = frame.size
         flux = flux_new(Float(size.width), Float(size.height))
+        openGLContext?.unlock()
         
         CVDisplayLinkStart(displayLink!)
     }
