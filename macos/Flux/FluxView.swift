@@ -147,7 +147,8 @@ class FluxView: ScreenSaverView {
         openGLContext?.makeCurrentContext()
         
         let size = frame.size
-        guard let flux = flux_new(Float(size.width), Float(size.height), 2.0, SETTINGS) else {
+        let pixelRatio = Double(window!.backingScaleFactor);
+        guard let flux = flux_new(Float(size.width), Float(size.height), pixelRatio , SETTINGS) else {
             // TODO: question the FFI for the last error
             print("Can’t initialize Flux")
             openGLContext?.unlock()
