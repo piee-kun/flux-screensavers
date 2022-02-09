@@ -164,6 +164,7 @@ class FluxView: ScreenSaverView {
     override func stopAnimation() {
         // Don’t call super. See startAnimation.
         CVDisplayLinkStop(displayLink!)
+        flux_destroy(flux!)
     }
 
     private func drawView() -> CVReturn {
