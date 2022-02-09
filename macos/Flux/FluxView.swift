@@ -178,6 +178,12 @@ class FluxView: ScreenSaverView {
         return kCVReturnSuccess
     }
     
+    override func draw(_ rect: NSRect) {
+        // Noop.
+        // We draw everything manually in animateOneFrame on a CVDisplayLink timer.
+        // This stops ScreenSaverView from trying to draw stuff and creating OpenGL errors.
+    }
+    
     override func animateOneFrame() {
         super.animateOneFrame()
         
