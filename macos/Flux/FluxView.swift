@@ -13,43 +13,42 @@ let SETTINGS = """
     "viscosity": 1.0,
     "velocityDissipation": 0.0,
     "startingPressure": 0.8,
-    "fluidWidth": 205,
-    "fluidHeight": 128,
+    "fluidSize": 128,
     "fluidSimulationFrameRate": 30.0,
-    "diffusionIterations": 10,
+    "diffusionIterations": 20,
     "pressureIterations": 60,
     "colorScheme": "Peacock",
     "lineLength": 180.0,
     "lineWidth": 6.0,
-    "lineBeginOffset": 0.40,
-    "lineFadeOutLength": 0.01,
+    "lineBeginOffset": 0.50,
+    "lineFadeOutLength": 0.005,
     "springStiffness": 0.2,
     "springVariance": 0.25,
     "springMass": 2.0,
     "springRestLength": 0.0,
     "maxLineVelocity": 0.02,
     "advectionDirection": 1.0,
-    "adjustAdvection": 20.0,
+    "adjustAdvection": 22.0,
     "gridSpacing": 20,
     "viewScale": 1.2,
     "noiseChannel1": {
         "scale": 0.9,
-        "multiplier": 0.23,
+        "multiplier": 0.20,
         "offset1": 2.0,
-        "offset2": 8.0,
+        "offset2": 10.0,
         "offsetIncrement": 0.01,
-        "delay": 0.15,
+        "delay": 0.5,
         "blendDuration": 3.5,
         "blendThreshold": 0.4,
         "blendMethod": "Curl"
     },
     "noiseChannel2": {
         "scale": 25.0,
-        "multiplier": 0.1,
+        "multiplier": 0.08,
         "offset1": 3.0,
         "offset2": 2.0,
         "offsetIncrement": 0.02,
-        "delay": 0.15,
+        "delay": 0.2,
         "blendDuration": 1.0,
         "blendThreshold": 0.0,
         "blendMethod": "Curl"
@@ -148,9 +147,16 @@ class FluxView: ScreenSaverView {
         openGLContext?.lock()
         openGLContext?.makeCurrentContext()
         
-        let size = frame.size
-        let pixelRatio = Double(window!.backingScaleFactor);
-        guard let flux = flux_new(Float(size.width), Float(size.height), pixelRatio , SETTINGS) else {
+        let logical_size = frame.size
+        let physical_size = window!.convertToBacking(frame).size;
+        print(logical_size, physical_size)
+        guard let flux = flux_new(
+            Float(logical_size.width),
+            Float(logical_size.height),
+            Float(physical_size.width),
+            Float(physical_size.height),
+            SETTINGS
+        ) else {
             // TODO: question the FFI for the last error
             print("Can’t initialize Flux")
             openGLContext?.unlock()
@@ -202,8 +208,6 @@ class FluxView: ScreenSaverView {
     override func resizeSubviews(withOldSize oldSize: NSSize) {
         super.resizeSubviews(withOldSize: oldSize)
         
-        let size = window!.frame.size
-        
         // Detach the view from the OpenGL context, otherwise resizing breaks.
         // Lock things just in case
         openGLContext.lock()
@@ -212,7 +216,19 @@ class FluxView: ScreenSaverView {
         // First resize the frame
         setFrameSize(window!.frame.size)
         // Next resize the GL app
-        flux_resize(flux, Float(size.width), Float(size.height))
+        let logical_size = frame.size
+        let physical_size = window!.convertToBacking(frame).size;
+        
+//        Debug
+//        print("resize:", logical_size, physical_size)
+        
+        flux_resize(
+            flux,
+            Float(logical_size.width),
+            Float(logical_size.height),
+            Float(physical_size.width),
+            Float(physical_size.height)
+        )
         
         openGLContext.view = self
         openGLContext.unlock()

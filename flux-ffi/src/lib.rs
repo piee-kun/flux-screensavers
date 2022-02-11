@@ -4,9 +4,10 @@ use std::os::raw::c_char;
 use std::rc::Rc;
 
 fn init_flux(
-    width: f32,
-    height: f32,
-    pixel_ratio: f64,
+    logical_width: f32,
+    logical_height: f32,
+    physical_width: f32,
+    physical_height: f32,
     settings_json_ptr: *const c_char,
 ) -> Result<Flux, String> {
     let raw_context = unsafe { glow::Context::from_loader_function(|addr| get_proc_address(addr)) };
@@ -20,9 +21,10 @@ fn init_flux(
 
     Flux::new(
         &context,
-        width as u32,
-        height as u32,
-        pixel_ratio,
+        logical_width as u32,
+        logical_height as u32,
+        physical_width as u32,
+        physical_height as u32,
         &settings,
     )
     .map_err(|err| err.to_string())
@@ -30,12 +32,19 @@ fn init_flux(
 
 #[no_mangle]
 pub extern "C" fn flux_new(
-    width: f32,
-    height: f32,
-    pixel_ratio: f64,
+    logical_width: f32,
+    logical_height: f32,
+    physical_width: f32,
+    physical_height: f32,
     settings_json_ptr: *const c_char,
 ) -> *mut Flux {
-    let flux = match init_flux(width, height, pixel_ratio, settings_json_ptr) {
+    let flux = match init_flux(
+        logical_width,
+        logical_height,
+        physical_width,
+        physical_height,
+        settings_json_ptr,
+    ) {
         Err(_msg) => {
             // TODO: log stuff
             return std::ptr::null_mut();
@@ -52,8 +61,19 @@ pub unsafe extern "C" fn flux_animate(flux: *mut Flux, timestamp: f32) {
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn flux_resize(flux: *mut Flux, logical_width: f32, logical_height: f32) {
-    (&mut *flux).resize(logical_width as u32, logical_height as u32);
+pub unsafe extern "C" fn flux_resize(
+    flux: *mut Flux,
+    logical_width: f32,
+    logical_height: f32,
+    physical_width: f32,
+    physical_height: f32,
+) {
+    (&mut *flux).resize(
+        logical_width as u32,
+        logical_height as u32,
+        physical_width as u32,
+        physical_height as u32,
+    );
 }
 
 #[no_mangle]
