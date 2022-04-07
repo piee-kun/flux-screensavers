@@ -25,6 +25,7 @@ let SETTINGS = """
     "springStiffness": 0.2,
     "springVariance": 0.25,
     "springMass": 2.0,
+    "springDamping": 5.0,
     "springRestLength": 0.0,
     "maxLineVelocity": 0.02,
     "advectionDirection": 1.0,
