@@ -68,6 +68,7 @@ checksum = "5827cebf4670468b8772dd191856768aedcb1b0278a04f989f7766351917b9dc"
 [[package]]
 name = "flux"
 version = "1.0.0"
+source = "git+https://github.com/sandydoo/flux#e1ced06b864824c9d0cfab2b9efa123eb9f4293d"
 dependencies = [
  "bytemuck",
  "glow",
