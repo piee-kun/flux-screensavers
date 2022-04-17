@@ -33,7 +33,7 @@
       in rec {
         packages = {
           flux-screensaver-windows = naersk-lib.buildPackage rec {
-            name = "flux-windows";
+            name = "flux-screensaver-windows";
             version = "latest";
             src = ./windows;
 
@@ -67,11 +67,11 @@
           };
         };
 
-        defaultPackage = packages.flux-windows;
+        defaultPackage = packages.flux-screensaver-windows;
 
         devShell = pkgs.mkShell {
-          inputsFrom = [ packages.flux-windows ];
-          packages = with pkgs; [ toolchain nix-fmt ripgrep ];
+          inputsFrom = [ packages.flux-screensaver-windows ];
+          packages = with pkgs; [ toolchain nixfmt ripgrep ];
         };
       });
 }
