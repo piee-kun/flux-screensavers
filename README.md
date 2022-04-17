@@ -11,7 +11,7 @@ This repository contains:
 - `flux-ffi` — a foreign function interface for the [Flux library][flux].
 - Native screensavers for the following platforms:
   - [MacOS](#macos)
-  - ~Windows~
+  - [Windows](#windows)
   - ~Linux~
 
 ## Build for platform
@@ -26,6 +26,16 @@ cargo build --release --target x86_64-apple-darwin
 ```
 
 Then compile with XCode.
+
+### Windows
+
+Cross-compile to Windows from NixOS.
+
+```sh
+nix build ./#flux-screensaver-windows
+```
+
+I haven’t tested native builds on Windows. You’ll need SDL2.
 
 
 [flux]: https://github.com/sandydoo/flux
