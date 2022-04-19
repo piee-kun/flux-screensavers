@@ -32,9 +32,13 @@
         };
       in rec {
         packages = {
-          flux-screensaver-windows = naersk-lib.buildPackage rec {
-            name = "flux-screensaver-windows";
-            version = "latest";
+          flux-screensaver-windows = let
+            SDL2_static = pkgs.pkgsCross.mingwW64.SDL2.overrideAttrs (old: {
+              name = "SDL2-static-${old.version}";
+              dontDisableStatic = true;
+            });
+          in naersk-lib.buildPackage rec {
+            name = "flux-windows-screensaver";
             src = ./windows;
 
             nativeBuildInputs = with pkgs.pkgsCross.mingwW64; [ stdenv.cc ];
@@ -43,7 +47,7 @@
               windows.mingw_w64_pthreads
               windows.pthreads
               pkgs.ripgrep
-              SDL2
+              SDL2_static
             ];
 
             CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
@@ -53,16 +57,17 @@
 
             singleStep = true;
 
+            # Hack around dependencies having build scripts when cross-compiling
+            # https://github.com/nix-community/naersk/issues/181
             preBuild = ''
-              export SDL2_INCLUDE_PATH=${pkgs.pkgsCross.mingwW64.SDL2.dev}/include
-              export NIX_LDFLAGS="$NIX_LDFLAGS -L ${pkgs.pkgsCross.mingwW64.SDL2}/bin"
+              export NIX_LDFLAGS="$NIX_LDFLAGS -L ${SDL2_static}/lib"
               export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-args=$(echo $NIX_LDFLAGS | rg  '(-L.*)(\s|$)' --only-matching)"
               export NIX_LDFLAGS=
             '';
 
-            # TODO: change binary extension to `scr`
+            # Change the extension to .scr (Windows screensaver)
             postInstall = ''
-              cp ${pkgs.pkgsCross.mingwW64.SDL2}/bin/SDL2.dll $out/bin/SDL2.dll
+              mv $out/bin/${name}.exe $out/bin/${name}.scr
             '';
           };
         };
