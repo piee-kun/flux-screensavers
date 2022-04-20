@@ -1,4 +1,4 @@
-// Disable the console window that pops up when you launch the .exe 
+// Disable the console window that pops up when you launch the .exe
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use flux::{settings::*, *};
@@ -61,11 +61,13 @@ enum Mode {
 }
 
 fn main() {
+    env_logger::init();
+
     match read_flags() {
         Ok(Mode::Screensaver) => run_flux(),
 
         Err(err) => {
-            println!("{}", err);
+            log::error!("{}", err);
             std::process::exit(1)
         }
     };
@@ -87,8 +89,14 @@ fn run_flux() {
     let logical_width = (physical_width as f64 / scale_factor) as u32;
     let logical_height = (physical_height as f64 / scale_factor) as u32;
 
-    // Debug scaling
-    println!("pw: {}, ph: {}, lw: {}, lh: {}, dpi: {}", physical_width, physical_height, logical_width, logical_height, dpi);
+    log::debug!(
+        "pw: {}, ph: {}, lw: {}, lh: {}, dpi: {}",
+        physical_width,
+        physical_height,
+        logical_width,
+        logical_height,
+        dpi
+    );
 
     let window = video_subsystem
         .window("Flux", physical_width, physical_height)
@@ -96,7 +104,7 @@ fn run_flux() {
         .opengl()
         .build()
         .unwrap_or_else(|e| {
-            println!("{}", e.to_string());
+            log::error!("{}", e.to_string());
             std::process::exit(1)
         });
 
