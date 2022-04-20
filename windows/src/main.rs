@@ -58,14 +58,15 @@ const BASE_DPI: u32 = 96;
 
 enum Mode {
     Screensaver,
+    Preview(*const core::ffi::c_void),
 }
 
 fn main() {
     env_logger::init();
 
     match read_flags() {
-        Ok(Mode::Screensaver) => run_flux(),
-
+        Ok(Mode::Screensaver) => run_flux(None),
+        Ok(Mode::Preview(handle)) => run_flux(Some(handle)),
         Err(err) => {
             log::error!("{}", err);
             std::process::exit(1)
@@ -73,7 +74,7 @@ fn main() {
     };
 }
 
-fn run_flux() {
+fn run_flux(window_handle: Option<*const core::ffi::c_void>) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -81,32 +82,31 @@ fn run_flux() {
     gl_attr.set_context_profile(GLProfile::Core);
     gl_attr.set_context_version(4, 6); // TODO
 
-    let display_mode = video_subsystem.current_display_mode(0).unwrap();
-    let physical_width = display_mode.w as u32;
-    let physical_height = display_mode.h as u32;
-    let (_, dpi, _) = video_subsystem.display_dpi(0).unwrap();
-    let scale_factor = dpi as f64 / BASE_DPI as f64;
-    let logical_width = (physical_width as f64 / scale_factor) as u32;
-    let logical_height = (physical_height as f64 / scale_factor) as u32;
+    let (window, physical_width, physical_height) = {
+        if let Some(handle) = window_handle {
+            let w: *mut sdl2_sys::SDL_Window = unsafe { sdl2_sys::SDL_CreateWindowFrom(handle) };
 
-    log::debug!(
-        "pw: {}, ph: {}, lw: {}, lh: {}, dpi: {}",
-        physical_width,
-        physical_height,
-        logical_width,
-        logical_height,
-        dpi
-    );
+            let window: sdl2::video::Window =
+                unsafe { sdl2::video::Window::from_ll(video_subsystem.clone(), w) };
+            let (physical_width, physical_height) = window.size();
 
-    let window = video_subsystem
-        .window("Flux", physical_width, physical_height)
-        .fullscreen()
-        .opengl()
-        .build()
-        .unwrap_or_else(|e| {
-            log::error!("{}", e.to_string());
-            std::process::exit(1)
-        });
+            (window, physical_width, physical_height)
+        } else {
+            let display_mode = video_subsystem.current_display_mode(0).unwrap();
+            let physical_width = display_mode.w as u32;
+            let physical_height = display_mode.h as u32;
+            let window = video_subsystem
+                .window("Flux", physical_width, physical_height)
+                .fullscreen()
+                .opengl()
+                .build()
+                .unwrap_or_else(|e| {
+                    log::error!("{}", e.to_string());
+                    std::process::exit(1)
+                });
+            (window, physical_width, physical_height)
+        }
+    };
 
     // Hide mouse cursor
     sdl_context.mouse().show_cursor(false);
@@ -115,6 +115,18 @@ fn run_flux() {
     let gl = unsafe {
         glow::Context::from_loader_function(|s| video_subsystem.gl_get_proc_address(s) as *const _)
     };
+    let (_, dpi, _) = video_subsystem.display_dpi(0).unwrap();
+    let scale_factor = dpi as f64 / BASE_DPI as f64;
+    let logical_width = (physical_width as f64 / scale_factor) as u32;
+    let logical_height = (physical_height as f64 / scale_factor) as u32;
+    log::debug!(
+        "pw: {}, ph: {}, lw: {}, lh: {}, dpi: {}",
+        physical_width,
+        physical_height,
+        logical_width,
+        logical_height,
+        dpi
+    );
     let mut flux = Flux::new(
         &Rc::new(gl),
         logical_width,
@@ -149,6 +161,14 @@ fn run_flux() {
 fn read_flags() -> Result<Mode, String> {
     match std::env::args().nth(1).as_mut().map(|s| s.as_str()) {
         Some("/s") => Ok(Mode::Screensaver),
+        Some("/p") => {
+            let handle_id = std::env::args()
+                .nth(2)
+                .ok_or_else(|| "I can’t find the window to show a screensaver preview.")?;
+            let handle =
+                handle_id.parse::<usize>().map_err(|e| e.to_string())? as *const core::ffi::c_void;
+            Ok(Mode::Preview(handle))
+        }
         Some(s) => {
             return Err(format!("I don’t know what the argument {} is.", s));
         }
@@ -157,12 +177,3 @@ fn read_flags() -> Result<Mode, String> {
         }
     }
 }
-
-// let sdl_context = sdl2::init()?;
-// let w: *mut sdl2_sys::SDL_Window =
-//     unsafe { sdl2_sys::SDL_CreateWindowFrom(parent as *const c_void) };
-
-// let window: sdl2::video::Window = {
-//     let video_subsystem = sdl_context.video()?;
-//     unsafe { sdl2::video::Window::from_ll(video_subsystem, w) }
-// };

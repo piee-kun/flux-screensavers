@@ -8,6 +8,7 @@ env_logger = "0.9"
 flux = { version = "1", git = "https://github.com/sandydoo/flux", branch = "main" }
 glow = "0.11.2"
 log = "0.4.16"
+sdl2-sys = "0.35.2"
 
 [dependencies.sdl2]
 version = "0.35.2"
