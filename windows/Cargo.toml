@@ -15,5 +15,9 @@ version = "0.35.2"
 default-features = false
 features = [ "static-link" ]
 
+[dependencies.winapi]
+version =  "0.3.9"
+features = [ "winuser" ]
+
 # [patch."https://github.com/sandydoo/flux"]
 # flux = { version = "1", path = "../../flux/crates/flux" }

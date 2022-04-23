@@ -6,6 +6,8 @@ use sdl2::event::Event;
 use sdl2::keyboard::Keycode;
 use sdl2::video::GLProfile;
 use std::rc::Rc;
+use winapi::shared::windef::HWND;
+use core::ffi::c_void;
 
 const SETTINGS: Settings = Settings {
     viscosity: 1.0,
@@ -58,7 +60,7 @@ const BASE_DPI: u32 = 96;
 
 enum Mode {
     Screensaver,
-    Preview(*const core::ffi::c_void),
+    Preview(HWND),
 }
 
 fn main() {
@@ -74,7 +76,7 @@ fn main() {
     };
 }
 
-fn run_flux(window_handle: Option<*const core::ffi::c_void>) {
+fn run_flux(window_handle: Option<HWND>) {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
 
@@ -83,14 +85,43 @@ fn run_flux(window_handle: Option<*const core::ffi::c_void>) {
     gl_attr.set_context_version(4, 6); // TODO
 
     let (window, physical_width, physical_height) = {
-        if let Some(handle) = window_handle {
-            let w: *mut sdl2_sys::SDL_Window = unsafe { sdl2_sys::SDL_CreateWindowFrom(handle) };
+        if let Some(parent_handle) = window_handle {
+            sdl2::hint::set("SDL_HINT_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
+            let sdl_window: *mut sdl2_sys::SDL_Window = unsafe { sdl2_sys::SDL_CreateWindowFrom(parent_handle as *const c_void) };
 
-            let window: sdl2::video::Window =
-                unsafe { sdl2::video::Window::from_ll(video_subsystem.clone(), w) };
+            if sdl_window.is_null() {
+                log::error!("Can’t create the preview window with the handle {:?}", parent_handle);
+                std::process::exit(1)
+            }
+
+            let parent_window: sdl2::video::Window =
+                unsafe { sdl2::video::Window::from_ll(video_subsystem.clone(), sdl_window) };
+
+            let window = video_subsystem.window("Flux", 0, 0).position(0, 0).borderless().hidden().opengl().build().unwrap();
+
+            unsafe {
+                if let Some(handle) = { get_window_handle_win32(window.raw()) } {
+                    use winapi::um::winuser::{SetParent, GWL_STYLE, WS_CHILD, WS_POPUP};
+                    if SetParent(handle, parent_handle).is_null() {
+                        log::error!("Can’t connect to the preview window");
+                        std::process::exit(1);
+                    }
+                    // Make this a child window so it will close when the parent dialog closes
+                    // #[cfg(target_arch = "x86_64")]
+                    {
+                        use winapi::shared::basetsd::LONG_PTR;
+                        winapi::um::winuser::SetWindowLongPtrA(handle,
+                                                               GWL_STYLE,
+                                                               (winapi::um::winuser::GetWindowLongPtrA(handle, GWL_STYLE)
+                                                                & !WS_POPUP as LONG_PTR)
+                                                               | WS_CHILD as LONG_PTR);
+                    }
+                }
+            }
+
             let (physical_width, physical_height) = window.size();
 
-            (window, physical_width, physical_height)
+            (parent_window, physical_width, physical_height)
         } else {
             let display_mode = video_subsystem.current_display_mode(0).unwrap();
             let physical_width = display_mode.w as u32;
@@ -166,7 +197,7 @@ fn read_flags() -> Result<Mode, String> {
                 .nth(2)
                 .ok_or_else(|| "I can’t find the window to show a screensaver preview.")?;
             let handle =
-                handle_id.parse::<usize>().map_err(|e| e.to_string())? as *const core::ffi::c_void;
+                handle_id.parse::<usize>().map_err(|e| e.to_string())? as HWND;
             Ok(Mode::Preview(handle))
         }
         Some(s) => {
@@ -175,5 +206,26 @@ fn read_flags() -> Result<Mode, String> {
         None => {
             return Err(format!("{}", "You need to provide at least on flag."));
         }
+    }
+}
+
+unsafe fn get_window_handle_win32(sdl_window: *mut sdl2_sys::SDL_Window) -> Option<HWND> {
+    use sdl2_sys::{SDL_GetWindowWMInfo, SDL_SysWMinfo, SDL_SysWMinfo__bindgen_ty_1, SDL_bool, SDL_version,
+                   SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL, SDL_SYSWM_TYPE};
+
+    let mut syswmi = SDL_SysWMinfo { version:   SDL_version { major: SDL_MAJOR_VERSION as u8,
+                                                              minor: SDL_MINOR_VERSION as u8,
+                                                              patch: SDL_PATCHLEVEL as u8, },
+                                     subsystem: SDL_SYSWM_TYPE::SDL_SYSWM_UNKNOWN,
+                                     info:      SDL_SysWMinfo__bindgen_ty_1 { dummy: [0; 64] }, };
+
+    match SDL_GetWindowWMInfo(sdl_window, &mut syswmi) {
+        SDL_bool::SDL_TRUE => {
+            assert!(syswmi.subsystem == SDL_SYSWM_TYPE::SDL_SYSWM_WINDOWS);
+            let handle: HWND = std::mem::transmute(syswmi.info.win.window);
+            assert!(!handle.is_null());
+            Some(handle)
+        },
+        SDL_bool::SDL_FALSE => None,
     }
 }
