@@ -110,6 +110,7 @@ dependencies = [
  "glow",
  "log",
  "sdl2",
+ "sdl2-sys",
 ]
 
 [[package]]
