@@ -33,8 +33,13 @@
       in rec {
         packages = {
           flux-screensaver-windows = let
-            SDL2_static = pkgs.pkgsCross.mingwW64.SDL2.overrideAttrs (old: {
-              name = "SDL2-static-${old.version}";
+            SDL2_static = pkgs.pkgsCross.mingwW64.SDL2.overrideAttrs (old: rec {
+              version = "2.0.22";
+              name = "SDL2-static-${version}";
+              src = builtins.fetchurl {
+                url = "https://www.libsdl.org/release/${old.pname}-${version}.tar.gz";
+                sha256 = "sha256:0bkzd5h7kn4xmd93hpbla4n2f82nb35s0xcs4p3kybl84wqvyz7y";
+              };
               dontDisableStatic = true;
             });
           in naersk-lib.buildPackage rec {

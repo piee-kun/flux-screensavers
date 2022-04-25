@@ -86,7 +86,7 @@ fn run_flux(window_handle: Option<HWND>) {
 
     let (window, physical_width, physical_height) = {
         if let Some(parent_handle) = window_handle {
-            sdl2::hint::set("SDL_HINT_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
+            sdl2::hint::set("SDL_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
             let sdl_window: *mut sdl2_sys::SDL_Window = unsafe { sdl2_sys::SDL_CreateWindowFrom(parent_handle as *const c_void) };
 
             if sdl_window.is_null() {
@@ -97,29 +97,7 @@ fn run_flux(window_handle: Option<HWND>) {
             let parent_window: sdl2::video::Window =
                 unsafe { sdl2::video::Window::from_ll(video_subsystem.clone(), sdl_window) };
 
-            let window = video_subsystem.window("Flux", 0, 0).position(0, 0).borderless().hidden().opengl().build().unwrap();
-
-            unsafe {
-                if let Some(handle) = { get_window_handle_win32(window.raw()) } {
-                    use winapi::um::winuser::{SetParent, GWL_STYLE, WS_CHILD, WS_POPUP};
-                    if SetParent(handle, parent_handle).is_null() {
-                        log::error!("Can’t connect to the preview window");
-                        std::process::exit(1);
-                    }
-                    // Make this a child window so it will close when the parent dialog closes
-                    // #[cfg(target_arch = "x86_64")]
-                    {
-                        use winapi::shared::basetsd::LONG_PTR;
-                        winapi::um::winuser::SetWindowLongPtrA(handle,
-                                                               GWL_STYLE,
-                                                               (winapi::um::winuser::GetWindowLongPtrA(handle, GWL_STYLE)
-                                                                & !WS_POPUP as LONG_PTR)
-                                                               | WS_CHILD as LONG_PTR);
-                    }
-                }
-            }
-
-            let (physical_width, physical_height) = window.size();
+            let (physical_width, physical_height) = parent_window.size();
 
             (parent_window, physical_width, physical_height)
         } else {
@@ -209,23 +187,3 @@ fn read_flags() -> Result<Mode, String> {
     }
 }
 
-unsafe fn get_window_handle_win32(sdl_window: *mut sdl2_sys::SDL_Window) -> Option<HWND> {
-    use sdl2_sys::{SDL_GetWindowWMInfo, SDL_SysWMinfo, SDL_SysWMinfo__bindgen_ty_1, SDL_bool, SDL_version,
-                   SDL_MAJOR_VERSION, SDL_MINOR_VERSION, SDL_PATCHLEVEL, SDL_SYSWM_TYPE};
-
-    let mut syswmi = SDL_SysWMinfo { version:   SDL_version { major: SDL_MAJOR_VERSION as u8,
-                                                              minor: SDL_MINOR_VERSION as u8,
-                                                              patch: SDL_PATCHLEVEL as u8, },
-                                     subsystem: SDL_SYSWM_TYPE::SDL_SYSWM_UNKNOWN,
-                                     info:      SDL_SysWMinfo__bindgen_ty_1 { dummy: [0; 64] }, };
-
-    match SDL_GetWindowWMInfo(sdl_window, &mut syswmi) {
-        SDL_bool::SDL_TRUE => {
-            assert!(syswmi.subsystem == SDL_SYSWM_TYPE::SDL_SYSWM_WINDOWS);
-            let handle: HWND = std::mem::transmute(syswmi.info.win.window);
-            assert!(!handle.is_null());
-            Some(handle)
-        },
-        SDL_bool::SDL_FALSE => None,
-    }
-}
