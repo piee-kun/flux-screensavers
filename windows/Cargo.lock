@@ -91,7 +91,7 @@ dependencies = [
 [[package]]
 name = "flux"
 version = "1.0.0"
-source = "git+https://github.com/sandydoo/flux?branch=main#01f3d810f9eef41310b238b7b50a7c8239cb4c43"
+source = "git+https://github.com/sandydoo/flux?branch=main#91c592227207bc2bc0a7fa19d372df0ee2fe3f54"
 dependencies = [
  "bytemuck",
  "glow",
@@ -111,6 +111,7 @@ dependencies = [
  "log",
  "sdl2",
  "sdl2-sys",
+ "winapi",
 ]
 
 [[package]]
