@@ -66,7 +66,7 @@
             # https://github.com/nix-community/naersk/issues/181
             preBuild = ''
               export NIX_LDFLAGS="$NIX_LDFLAGS -L ${SDL2_static}/lib"
-              export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-args=$(echo $NIX_LDFLAGS | rg  '(-L.*)(\s|$)' --only-matching)"
+              export CARGO_TARGET_X86_64_PC_WINDOWS_GNU_RUSTFLAGS="-C link-args=$(echo $NIX_LDFLAGS | rg  '(-L\s?\S+)\s?' --only-matching)"
               export NIX_LDFLAGS=
             '';
 
