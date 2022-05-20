@@ -314,6 +314,8 @@ unsafe fn set_window_parent_win32(handle: HWND, parent_handle: HWND) -> bool {
     true
 }
 
+// Specifying DPI awareness in the app manifest does not apply when running in a
+// preview window.
 #[cfg(windows)]
 pub fn set_dpi_awareness() -> Result<(), String> {
     use std::ptr;
@@ -327,12 +329,13 @@ pub fn set_dpi_awareness() -> Result<(), String> {
 
     match unsafe { SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE) } {
         S_OK => Ok(()),
-        E_INVALIDARG => Err("Could not set DPI awareness.".into()),
+        E_INVALIDARG => Err("Can’t enable support for high-resolution screens.".to_string()),
+        // The app manifest settings, if applied, trigger this path.
         _ => {
             let mut awareness = PROCESS_DPI_UNAWARE;
             match unsafe { GetProcessDpiAwareness(ptr::null_mut(), &mut awareness) } {
                 S_OK if awareness == PROCESS_PER_MONITOR_DPI_AWARE => Ok(()),
-                _ => Err("Please disable DPI awareness override in program properties.".into()),
+                _ => Err("Can’t enable support for high-resolution screens. The setting has been modified and set to an unsupported value.".to_string()),
             }
         }
     }
