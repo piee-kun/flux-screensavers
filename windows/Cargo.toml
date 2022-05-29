@@ -35,4 +35,4 @@ winres = "0.1.12"
 winres = { git = "https://github.com/sandydoo/winres", branch = "bugfix/fix-linking" }
 
 # [patch."https://github.com/sandydoo/flux"]
-# flux = { version = "2", path = "../../flux/crates/flux" }
+# flux = { version = "2", path = "../../flux/flux" }
