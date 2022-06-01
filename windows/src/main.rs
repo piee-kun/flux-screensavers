@@ -15,9 +15,18 @@ use winapi::shared::windef::HWND;
 const BASE_DPI: u32 = 96;
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: i32 = 10;
 
+const SETTINGS_COMING_SOON_MESSAGE: &'static str = r#"
+    Coming soon!
+
+    You’ll be able to personalise the screensaver here and make it your own, but it’s not quite ready yet.
+    Follow me on Twitter @sandy_doo for updates!
+"#;
+
+#[derive(PartialEq)]
 enum Mode {
     Screensaver,
     Preview(RawWindowHandle),
+    Settings,
 }
 
 struct Instance {
@@ -63,6 +72,18 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
+
+    if mode == Mode::Settings {
+        use sdl2::messagebox::{show_simple_message_box, MessageBoxFlag};
+        show_simple_message_box(
+            MessageBoxFlag::INFORMATION,
+            "Flux Settings",
+            &SETTINGS_COMING_SOON_MESSAGE,
+            None,
+        )
+        .map_err(|msg| format!("Can’t open a message box: {}", msg))?;
+        return Ok(());
+    }
 
     let gl_attr = video_subsystem.gl_attr();
     gl_attr.set_context_profile(GLProfile::Core);
@@ -271,6 +292,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
             WindowMode::AllDisplays(instances)
         }
+        _ => unreachable!(),
     };
 
     // Try to enable vsync.
@@ -309,6 +331,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                     }
                     _ => {}
                 },
+                _ => (),
             }
         }
 
@@ -330,12 +353,36 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
 fn read_flags() -> Result<Mode, String> {
     match std::env::args().nth(1).as_mut().map(|s| {
-        // I think the test button sends an uppercase /S, which doesn’t seem to
-        // be documented anywhere.
         s.make_ascii_lowercase();
         s.as_str()
     }) {
+        // Settings panel
+        //
+        // /c -> you’re supposed to support this, but AFAIK the only way to get
+        // this is to manually send it from the command line.
+        //
+        // /c:HWND -> the screensaver configuration window gives a window
+        // handle. I’m not sure what it’s for. Maybe you’re supposed to use it
+        // to close your settings window if the parent windows closes?
+        //
+        // No flags -> <right click + configure> sends no flags whatsoever.
+        Some("/c") | None => Ok(Mode::Settings),
+        Some(s) if s.starts_with("/c:") => Ok(Mode::Settings),
+
+        // Run screensaver
+        //
+        // /s -> run the screensaver.
+        //
+        // /S -> <right click + test> sends an uppercase /S, which doesn’t
+        // seem to be documented anywhere.
         Some("/s") => Ok(Mode::Screensaver),
+
+        // Run preview
+        //
+        // /p HWND -> draw the screensaver in the preview window.
+        //
+        // /p:HWND -> TODO: apparently, this is also an option you need to
+        // support.
         Some("/p") => {
             let handle_ptr = std::env::args()
                 .nth(2)
@@ -347,11 +394,9 @@ fn read_flags() -> Result<Mode, String> {
             handle.hwnd = handle_ptr as *mut c_void;
             Ok(Mode::Preview(RawWindowHandle::Win32(handle)))
         }
+
         Some(s) => {
             return Err(format!("I don’t know what the argument {} is.", s));
-        }
-        None => {
-            return Err(format!("{}", "You need to provide at least on flag."));
         }
     }
 }
