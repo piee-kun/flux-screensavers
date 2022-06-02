@@ -1,23 +1,41 @@
 [package]
-name = "flux-windows-screensaver"
+name = "flux-screensaver-windows"
 version = "0.1.0"
+description = "An ode to the macOS Drift screensaver"
+authors = ["Sander Melnikov <hey@sandydoo.me"]
+repository = "https://github.com/sandydoo/flux-screensavers/"
 edition = "2021"
+build = "build.rs"
+
+[package.metadata.winres]
+FileDescription = "An ode to the macOS Drift screensaver"
+LegalCopyright = "© 2022 Sander Melnikov"
 
 [dependencies]
 env_logger = "0.9"
-flux = { version = "1", git = "https://github.com/sandydoo/flux", branch = "main" }
 glow = "0.11.2"
-log = "0.4.16"
+log = "0.4"
+raw-window-handle = "0.4"
 sdl2-sys = "0.35.2"
+
+[dependencies.flux]
+git = "https://github.com/sandydoo/flux"
+tag = "v2.2.0"
 
 [dependencies.sdl2]
 version = "0.35.2"
 default-features = false
-features = [ "static-link" ]
+features = [ "static-link", "raw-window-handle" ]
 
 [dependencies.winapi]
-version =  "0.3.9"
-features = [ "winuser" ]
+version =  "0.3"
+features = [ "winuser", "winerror", "shellscalingapi" ]
+
+[build-dependencies]
+winres = "0.1.12"
+
+[patch.crates-io]
+winres = { git = "https://github.com/sandydoo/winres", branch = "bugfix/fix-linking" }
 
 # [patch."https://github.com/sandydoo/flux"]
-# flux = { version = "1", path = "../../flux/crates/flux" }
+# flux = { version = "2", path = "../../flux/flux" }

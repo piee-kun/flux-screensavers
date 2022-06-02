@@ -2,19 +2,19 @@
   description = "Flux screensavers";
 
   inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
+    flake-utils.url = "github:numtide/flake-utils";
     fenix = {
       url = "github:nix-community/fenix";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    flake-utils.url = "github:numtide/flake-utils";
     naersk = {
       url = "github:nmattia/naersk";
       inputs.nixpkgs.follows = "nixpkgs";
     };
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
   };
 
-  outputs = { self, fenix, flake-utils, naersk, nixpkgs }:
+  outputs = { self, nixpkgs, flake-utils, fenix, naersk }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
@@ -43,16 +43,21 @@
               dontDisableStatic = true;
             });
           in naersk-lib.buildPackage rec {
-            name = "flux-windows-screensaver";
+            name = "flux-screensaver-windows";
             src = ./windows;
 
             nativeBuildInputs = with pkgs.pkgsCross.mingwW64; [ stdenv.cc ];
 
             buildInputs = with pkgs.pkgsCross.mingwW64; [
+              # Dig out windres from the depths of gcc
+              pkgs.pkgsCross.mingwW64.stdenv.cc.bintools.bintools_bin
+              # Needed by windres
+              pkgs.pkgsCross.mingwW64.stdenv.cc
+
               windows.mingw_w64_pthreads
               windows.pthreads
-              pkgs.ripgrep
               SDL2_static
+              pkgs.ripgrep
             ];
 
             CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
@@ -72,7 +77,7 @@
 
             # Change the extension to .scr (Windows screensaver)
             postInstall = ''
-              mv $out/bin/${name}.exe $out/bin/${name}.scr
+              mv $out/bin/${name}.exe "$out/bin/Flux.scr"
             '';
           };
         };
