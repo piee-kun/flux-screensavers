@@ -43,7 +43,7 @@
               dontDisableStatic = true;
             });
           in naersk-lib.buildPackage rec {
-            name = "flux-windows-screensaver";
+            name = "flux-screensaver-windows";
             src = ./windows;
 
             nativeBuildInputs = with pkgs.pkgsCross.mingwW64; [ stdenv.cc ];
@@ -77,7 +77,7 @@
 
             # Change the extension to .scr (Windows screensaver)
             postInstall = ''
-              mv $out/bin/${name}.exe $out/bin/${name}.scr
+              mv $out/bin/${name}.exe "$out/bin/Flux.scr"
             '';
           };
         };

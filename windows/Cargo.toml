@@ -1,5 +1,5 @@
 [package]
-name = "flux-windows-screensaver"
+name = "flux-screensaver-windows"
 version = "0.1.0"
 description = "An ode to the macOS Drift screensaver"
 authors = ["Sander Melnikov <hey@sandydoo.me"]
