@@ -10,50 +10,38 @@ import OpenGL.GL3
 
 let SETTINGS = """
 {
-    "viscosity": 1.0,
+    "mode": "Normal",
+    "viscosity": 5.0,
     "velocityDissipation": 0.0,
-    "startingPressure": 0.8,
+    "startingPressure": "Inherit",
     "fluidSize": 128,
-    "fluidSimulationFrameRate": 30.0,
-    "diffusionIterations": 20,
-    "pressureIterations": 60,
+    "fluidSimulationFrameRate": 60.0,
+    "diffusionIterations": 5,
+    "pressureIterations": 20,
     "colorScheme": "Peacock",
-    "lineLength": 220.0,
+    "lineLength": 300.0,
     "lineWidth": 5.0,
-    "lineBeginOffset": 0.50,
-    "lineFadeOutLength": 0.005,
-    "springStiffness": 0.35,
-    "springVariance": 0.25,
-    "springMass": 2.0,
-    "springDamping": 5.0,
-    "springRestLength": 0.0,
-    "maxLineVelocity": 1.0,
-    "advectionDirection": 1.0,
-    "adjustAdvection": 28.0,
-    "gridSpacing": 18,
-    "viewScale": 1.2,
-    "noiseChannel1": {
-        "scale": 1.0,
-        "multiplier": 0.2,
-        "offset1": 2.0,
-        "offset2": 10.0,
-        "offsetIncrement": 0.05,
-        "delay": 2.0,
-        "blendDuration": 5.0,
-        "blendThreshold": 0.4,
-        "blendMethod": "Curl"
-    },
-    "noiseChannel2": {
-        "scale": 25.0,
-        "multiplier": 0.02,
-        "offset1": 3.0,
-        "offset2": 2.0,
-        "offsetIncrement": 0.02,
-        "delay": 0.2,
-        "blendDuration": 1.0,
-        "blendThreshold": 0.0,
-        "blendMethod": "Curl"
-    }
+    "lineBeginOffset": 0.5,
+    "lineVariance": 0.5,
+    "viewScale": 1.6,
+    "gridSpacing": 21,
+    "noiseChannels": [
+        {
+            "scale": 2.5,
+            "multiplier": 1.0,
+            "offsetIncrement": 0.0015
+        },
+        {
+            "scale": 15.0,
+            "multiplier": 0.7,
+            "offsetIncrement": 0.0015
+        },
+        {
+            "scale": 30.0,
+            "multiplier": 0.5,
+            "offsetIncrement": 0.0015
+        }
+    ]
 }
 """
 
@@ -63,16 +51,16 @@ class FluxView: ScreenSaverView {
     var displayLink: CVDisplayLink!
     var flux: OpaquePointer?
     var currentTime: Float = 0
-    
+
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
-        
+
         let attributes: [NSOpenGLPixelFormatAttribute] = [
             NSOpenGLPixelFormatAttribute(NSOpenGLPFAAccelerated),
-            NSOpenGLPixelFormatAttribute(NSOpenGLPFADoubleBuffer),
+            NSOpenGLPixelFormatAttribute(NSOpenGLPFATripleBuffer),
             NSOpenGLPixelFormatAttribute(NSOpenGLPFAColorSize), 32,
             NSOpenGLPixelFormatAttribute(NSOpenGLPFAOpenGLProfile),
-            NSOpenGLPixelFormatAttribute(NSOpenGLProfileVersion3_2Core),
+            NSOpenGLPixelFormatAttribute(NSOpenGLProfileVersion4_1Core),
             0
           ]
         guard let pixelFormat = NSOpenGLPixelFormat(attributes: attributes) else {
@@ -108,10 +96,7 @@ class FluxView: ScreenSaverView {
             
             let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
             let outputTime = outputTimePtr.pointee
-            _self.currentTime += 1000.0 * 1.0 / (Float(outputTime.rateScalar) * Float(outputTime.videoTimeScale) / Float(outputTime.videoRefreshPeriod))
-            
-            // This stutters for some reason?
-            // _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
+             _self.currentTime = 1000.0 * Float(outputTime.videoTime) / Float(outputTime.videoTimeScale)
             
             // Show FPS
             // let fps = (outputTime.rateScalar * Double(outputTime.videoTimeScale) / Double(outputTime.videoRefreshPeriod))
