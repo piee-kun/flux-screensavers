@@ -45,10 +45,10 @@ lipo target/aarch64-apple-darwin/release/libflux.a target/x86_64-apple-darwin/re
 Cross-compile to Windows from NixOS.
 
 ```sh
-nix build ./#flux-screensaver-windows
+nix build
 ```
 
-I haven’t tested native builds on Windows. You’ll need SDL2.
+I haven’t tested native builds on Windows. You’ll need Rust and a static build of SDL2.
 
 
 [flux]: https://github.com/sandydoo/flux
