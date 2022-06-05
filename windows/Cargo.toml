@@ -8,6 +8,7 @@ edition = "2021"
 build = "build.rs"
 
 [package.metadata.winres]
+ProductName = "Flux"
 FileDescription = "An ode to the macOS Drift screensaver"
 LegalCopyright = "© 2022 Sander Melnikov"
 
