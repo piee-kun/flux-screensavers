@@ -1,5 +1,5 @@
 {
-  description = "Flux screensavers";
+  description = "Flux Screensavers";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.05";
@@ -15,11 +15,11 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, fenix, naersk }:
-    flake-utils.lib.eachDefaultSystem (system:
+    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = nixpkgs.legacyPackages.${system};
-        inherit (pkgs) lib stdenv;
-        toolchain = with fenix.packages.${system};
+
+        rustToolchain = with fenix.packages.${system};
           combine ([
             latest.rustc
             latest.cargo
@@ -27,35 +27,43 @@
           ]);
 
         naersk-lib = naersk.lib.${system}.override {
-          rustc = toolchain;
-          cargo = toolchain;
+          rustc = rustToolchain;
+          cargo = rustToolchain;
         };
       in rec {
-        packages = {
-          flux-screensaver-windows = let
-            SDL2_static = pkgs.pkgsCross.mingwW64.SDL2.overrideAttrs (old: rec {
-              version = "2.0.22";
-              name = "SDL2-static-${version}";
-              src = builtins.fetchurl {
-                url = "https://www.libsdl.org/release/${old.pname}-${version}.tar.gz";
-                sha256 = "sha256:0bkzd5h7kn4xmd93hpbla4n2f82nb35s0xcs4p3kybl84wqvyz7y";
-              };
-              dontDisableStatic = true;
-            });
+        devShells.default = pkgs.mkShell {
+          inputsFrom = [ packages.default ];
+          packages = with pkgs; [ rustToolchain nixfmt ripgrep ];
+        };
+
+        packages.default = let
+          inherit (pkgs.pkgsCross) mingwW64;
+          SDL2_static = pkgs.pkgsCross.mingwW64.SDL2.overrideAttrs (old: rec {
+            version = "2.0.22";
+            name = "SDL2-static-${version}";
+            src = builtins.fetchurl {
+              url =
+                "https://www.libsdl.org/release/${old.pname}-${version}.tar.gz";
+              sha256 =
+                "sha256:0bkzd5h7kn4xmd93hpbla4n2f82nb35s0xcs4p3kybl84wqvyz7y";
+            };
+            dontDisableStatic = true;
+          });
           in naersk-lib.buildPackage rec {
             name = "flux-screensaver-windows";
             src = ./windows;
+            release = true;
+            singleStep = true;
+            gitAllRefs = true;
 
-            nativeBuildInputs = with pkgs.pkgsCross.mingwW64; [ stdenv.cc ];
-
-            buildInputs = with pkgs.pkgsCross.mingwW64; [
-              # Dig out windres from the depths of gcc
-              pkgs.pkgsCross.mingwW64.stdenv.cc.bintools.bintools_bin
+            nativeBuildInputs = [ mingwW64.stdenv.cc ];
+            buildInputs = [
               # Needed by windres
-              pkgs.pkgsCross.mingwW64.stdenv.cc
-
-              windows.mingw_w64_pthreads
-              windows.pthreads
+              mingwW64.stdenv.cc
+              # Dig out windres from the depths of gcc
+              mingwW64.stdenv.cc.bintools.bintools_bin
+              mingwW64.windows.pthreads
+              mingwW64.windows.mingw_w64_pthreads
               SDL2_static
               pkgs.ripgrep
             ];
@@ -65,7 +73,7 @@
               with pkgs.pkgsCross.mingwW64.stdenv;
               "${cc}/bin/${cc.targetPrefix}gcc";
 
-            singleStep = true;
+            shellHook = preBuild;
 
             # Hack around dependencies having build scripts when cross-compiling
             # https://github.com/nix-community/naersk/issues/181
@@ -80,13 +88,5 @@
               mv $out/bin/${name}.exe "$out/bin/Flux.scr"
             '';
           };
-        };
-
-        defaultPackage = packages.flux-screensaver-windows;
-
-        devShell = pkgs.mkShell {
-          inputsFrom = [ packages.flux-screensaver-windows ];
-          packages = with pkgs; [ toolchain nixfmt ripgrep ];
-        };
       });
 }
