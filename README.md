@@ -18,14 +18,22 @@ This repository contains:
 
 ### MacOS
 
-First build the FFI crate:
+Build with XCode.
 
 ```sh
-export MACOSX_DEPLOYMENT_TARGET=10.10
-cargo build --release --target x86_64-apple-darwin
-```
+cd macos
+xcodebuild -project Flux.xcodeproj/ -scheme Flux build
+````
 
-Then compile with XCode.
+XCode should automatically build the FFI crate. In case it doesn’t, here’s how to do it manually.
+
+```sh
+cd flux-ffi
+export MACOSX_DEPLOYMENT_TARGET=10.10
+cargo build --release --target aarch64-apple-darwin
+cargo build --release --target x86_64-apple-darwin
+lipo target/aarch64-apple-darwin/release/libflux.a target/x86_64-apple-darwin/release/libflux.a -create -output libflux.a
+```
 
 ### Windows
 

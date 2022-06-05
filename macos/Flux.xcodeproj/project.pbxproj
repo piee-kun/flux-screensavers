@@ -12,7 +12,7 @@
 		C5A8D9D327B07DF4000B449F /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = C5A8D9D227B07DF4000B449F /* AppDelegate.swift */; };
 		C5A8D9D527B07DF8000B449F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D427B07DF8000B449F /* Assets.xcassets */; };
 		C5A8D9D827B07DF8000B449F /* MainMenu.xib in Resources */ = {isa = PBXBuildFile; fileRef = C5A8D9D627B07DF8000B449F /* MainMenu.xib */; };
-		C5BFABD727B427FA00AE2C0F /* libflux.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C5BFABD627B427FA00AE2C0F /* libflux.a */; };
+		C5AB2490284D4F6B00C9B6B0 /* libflux.a in Frameworks */ = {isa = PBXBuildFile; fileRef = C5AB248F284D4F6B00C9B6B0 /* libflux.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -36,7 +36,7 @@
 		C5A8D9D427B07DF8000B449F /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		C5A8D9D727B07DF8000B449F /* Base */ = {isa = PBXFileReference; lastKnownFileType = file.xib; name = Base; path = Base.lproj/MainMenu.xib; sourceTree = "<group>"; };
 		C5A8D9D927B07DF8000B449F /* Runner.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Runner.entitlements; sourceTree = "<group>"; };
-		C5BFABD627B427FA00AE2C0F /* libflux.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libflux.a; path = "../flux-ffi/target/x86_64-apple-darwin/release/libflux.a"; sourceTree = "<group>"; };
+		C5AB248F284D4F6B00C9B6B0 /* libflux.a */ = {isa = PBXFileReference; lastKnownFileType = archive.ar; name = libflux.a; path = "../flux-ffi/libflux.a"; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -44,7 +44,7 @@
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				C5BFABD727B427FA00AE2C0F /* libflux.a in Frameworks */,
+				C5AB2490284D4F6B00C9B6B0 /* libflux.a in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -81,7 +81,7 @@
 		C51F82C227AE062500A16374 /* Frameworks */ = {
 			isa = PBXGroup;
 			children = (
-				C5BFABD627B427FA00AE2C0F /* libflux.a */,
+				C5AB248F284D4F6B00C9B6B0 /* libflux.a */,
 				C59412F927B209C200D85A3C /* flux.h */,
 				C51F82C427AE063C00A16374 /* libresolv.tbd */,
 			);
@@ -121,6 +121,7 @@
 				C51F82AB27ADD6C100A16374 /* Sources */,
 				C51F82AC27ADD6C100A16374 /* Frameworks */,
 				C51F82AD27ADD6C100A16374 /* Resources */,
+				C5AB2491284D50A800C9B6B0 /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -157,7 +158,7 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastSwiftUpdateCheck = 1310;
-				LastUpgradeCheck = 1310;
+				LastUpgradeCheck = 1320;
 				TargetAttributes = {
 					C51F82AE27ADD6C100A16374 = {
 						CreatedOnToolsVersion = 13.1;
@@ -205,6 +206,26 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		C5AB2491284D50A800C9B6B0 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/bash;
+			shellScript = "export MACOSX_DEPLOYMENT_TARGET=10.10\ncd ../flux-ffi\ncargo build --release --target aarch64-apple-darwin\ncargo build --release --target x86_64-apple-darwin\nlipo target/aarch64-apple-darwin/release/libflux.a target/x86_64-apple-darwin/release/libflux.a -create -output libflux.a\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		C51F82AB27ADD6C100A16374 /* Sources */ = {
@@ -354,6 +375,7 @@
 				MTL_FAST_MATH = YES;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
 			};
 			name = Release;
 		};
@@ -375,7 +397,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/target/x86_64-apple-darwin/release";
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/**";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -405,7 +427,7 @@
 					"@executable_path/../Frameworks",
 					"@loader_path/../Frameworks",
 				);
-				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/target/x86_64-apple-darwin/release";
+				LIBRARY_SEARCH_PATHS = "$(PROJECT_DIR)/../flux-ffi/**";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = me.sandydoo.flux;
 				PRODUCT_NAME = "$(TARGET_NAME)";

@@ -1,3 +1,6 @@
 # Rust
 /pkg
 /target
+
+# Universal FAT binary
+libflux.a
