@@ -62,7 +62,7 @@ class FluxView: ScreenSaverView {
             NSOpenGLPixelFormatAttribute(NSOpenGLPFAOpenGLProfile),
             NSOpenGLPixelFormatAttribute(NSOpenGLProfileVersion4_1Core),
             0
-          ]
+        ]
         guard let pixelFormat = NSOpenGLPixelFormat(attributes: attributes) else {
             print("Cannot construct OpenGL pixel format.")
             return nil
@@ -83,24 +83,12 @@ class FluxView: ScreenSaverView {
         super.init(coder: decoder)
     }
     
-    // This is helpful if you need access to window
-//    override func viewDidMoveToSuperview() {
-//        super.viewDidMoveToSuperview()
-//        if let window = superview?.window {
-//            displayLink = makeDisplayLink()
-//        }
-//    }
-    
     private func makeDisplayLink() -> CVDisplayLink? {
         func displayLinkOutputCallback(_ displayLink: CVDisplayLink, _ nowPtr: UnsafePointer<CVTimeStamp>, _ outputTimePtr: UnsafePointer<CVTimeStamp>, _ flagsIn: CVOptionFlags, _ flagsOut: UnsafeMutablePointer<CVOptionFlags>, _ displayLinkContext: UnsafeMutableRawPointer?) -> CVReturn {
             
             let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
             let outputTime = outputTimePtr.pointee
-             _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
-            
-            // Show FPS
-            // let fps = (outputTime.rateScalar * Double(outputTime.videoTimeScale) / Double(outputTime.videoRefreshPeriod))
-            //  print("FPS:\t \(fps)")
+            _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
 
             _self.animateOneFrame()
 
@@ -117,8 +105,8 @@ class FluxView: ScreenSaverView {
     
     override func lockFocus() {
       super.lockFocus()
-      if openGLContext!.view != self {
-        openGLContext!.view = self
+      if openGLContext.view != self {
+        openGLContext.view = self
       }
     }
     
@@ -130,8 +118,8 @@ class FluxView: ScreenSaverView {
         // Don’t call super because we’re managing our own timer.
         
         lockFocus()
-        openGLContext?.lock()
-        openGLContext?.makeCurrentContext()
+        openGLContext.lock()
+        openGLContext.makeCurrentContext()
         
         let logical_size = frame.size
         let physical_size = window!.convertToBacking(frame).size;
@@ -145,27 +133,27 @@ class FluxView: ScreenSaverView {
         ) else {
             // TODO: question the FFI for the last error
             print("Can’t initialize Flux")
-            openGLContext?.unlock()
+            openGLContext.unlock()
             return
         }
         
         self.flux = flux
-        openGLContext?.unlock()
+        openGLContext.unlock()
         
-        CVDisplayLinkStart(displayLink!)
+        CVDisplayLinkStart(displayLink)
     }
     
     override func stopAnimation() {
         // Don’t call super. See startAnimation.
-        CVDisplayLinkStop(displayLink!)
-        flux_destroy(flux!)
+        CVDisplayLinkStop(displayLink)
+        destroyFlux()
     }
 
     private func drawView() -> CVReturn {
         openGLContext.lock()
         openGLContext.makeCurrentContext()
 
-        flux_animate(flux, currentTime)
+        flux_animate(flux!, currentTime)
 
         openGLContext.flushBuffer()
         openGLContext.unlock()
@@ -185,9 +173,16 @@ class FluxView: ScreenSaverView {
         let _ = drawView()
     }
     
+    func destroyFlux() {
+        if flux != nil {
+            flux_destroy(flux!)
+            flux = nil
+        }
+    }
+    
     deinit {
-        CVDisplayLinkStop(displayLink!)
-        flux_destroy(flux!)
+        CVDisplayLinkStop(displayLink)
+        destroyFlux()
     }
     
     // The docs say I can override `resize`, but it’s not called...
