@@ -4,6 +4,11 @@
 
 # Screensavers for Flux
 
+### [You can now buy Flux as a Windows screensaver →][store]
+Enjoy staring at it for hours as your computer idles and help support development. More platforms coming soon!
+
+---
+
 I’m working on creating native screensavers for [Flux][flux] — a fluid simulation inspired by the MacOS Drift screensaver.
 
 This repository contains:
@@ -47,3 +52,4 @@ I haven’t tested native builds on Windows. You’ll need SDL2.
 
 
 [flux]: https://github.com/sandydoo/flux
+[store]: https://sandydoo.gumroad.com/l/flux
