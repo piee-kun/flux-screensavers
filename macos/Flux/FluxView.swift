@@ -50,7 +50,7 @@ class FluxView: ScreenSaverView {
     var openGLContext: NSOpenGLContext!
     var displayLink: CVDisplayLink!
     var flux: OpaquePointer?
-    var currentTime: Float = 0
+    var currentTime: Double = 0
 
     override init?(frame: NSRect, isPreview: Bool) {
         super.init(frame: frame, isPreview: isPreview)
@@ -96,7 +96,7 @@ class FluxView: ScreenSaverView {
             
             let _self = unsafeBitCast(displayLinkContext, to: FluxView.self)
             let outputTime = outputTimePtr.pointee
-             _self.currentTime = 1000.0 * Float(outputTime.videoTime) / Float(outputTime.videoTimeScale)
+             _self.currentTime = 1000.0 * Double(outputTime.videoTime) / Double(outputTime.videoTimeScale)
             
             // Show FPS
             // let fps = (outputTime.rateScalar * Double(outputTime.videoTimeScale) / Double(outputTime.videoRefreshPeriod))

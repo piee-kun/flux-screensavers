@@ -36,11 +36,11 @@ struct Instance {
 }
 
 impl Instance {
-    pub fn draw(&mut self, timestep: f32) {
+    pub fn draw(&mut self, timestamp: f64) {
         // Don’t use `gl_set_context_to_current`. It doesn’t use the
         // corrent context!
         self.window.gl_make_current(&self.context).unwrap();
-        self.flux.animate(timestep);
+        self.flux.animate(timestamp);
         self.window.gl_swap_window();
     }
 }
@@ -335,16 +335,16 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             }
         }
 
-        let timestep = start.elapsed().as_millis() as f32;
+        let timestamp = start.elapsed().as_millis() as f64;
         match window_mode {
             WindowMode::AllDisplays(ref mut instances) => {
                 for instance in instances.iter_mut() {
-                    instance.draw(timestep);
+                    instance.draw(timestamp);
                 }
             }
             WindowMode::PreviewWindow {
                 ref mut instance, ..
-            } => instance.draw(timestep),
+            } => instance.draw(timestamp),
         }
     }
 

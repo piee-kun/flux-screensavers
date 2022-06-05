@@ -90,8 +90,8 @@ dependencies = [
 
 [[package]]
 name = "flux"
-version = "2.2.0"
-source = "git+https://github.com/sandydoo/flux?tag=v2.2.0#207bda3499ac2aa2fe2dcfcd9dfc7ffed387baab"
+version = "3.0.0"
+source = "git+https://github.com/sandydoo/flux?tag=v3.0.0#d9de08ff184cd7e27243195930579e2a4d652e73"
 dependencies = [
  "bytemuck",
  "crevice",

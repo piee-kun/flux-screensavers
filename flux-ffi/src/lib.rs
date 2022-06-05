@@ -56,7 +56,7 @@ pub extern "C" fn flux_new(
 }
 
 #[no_mangle]
-pub unsafe extern "C" fn flux_animate(flux: *mut Flux, timestamp: f32) {
+pub unsafe extern "C" fn flux_animate(flux: *mut Flux, timestamp: f64) {
     (&mut *flux).animate(timestamp);
 }
 
