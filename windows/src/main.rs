@@ -97,6 +97,11 @@ fn run_flux(mode: Mode) -> Result<(), String> {
     #[cfg(debug_assertions)]
     gl_attr.set_context_flags().debug().set();
 
+    // SDL, by default, disables the screensaver and doesn’t allow the display
+    // to sleep. We want both of these things to happen in both screensaver and
+    // preview modes.
+    video_subsystem.enable_screen_saver();
+
     let settings = Rc::new(Settings {
         mode: settings::Mode::Normal,
         viscosity: 5.0,
@@ -138,10 +143,6 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 RawWindowHandle::Win32(handle) => handle.hwnd,
                 _ => return Err("This platform is not supported yet".to_string()),
             };
-
-            // SDL disables the screensaver by default. Make sure we let the
-            // screensaver run whenever we’re showing the preview.
-            video_subsystem.enable_screen_saver();
 
             // Tell SDL that the window we’re about to adopt will be used with
             // OpenGL.
