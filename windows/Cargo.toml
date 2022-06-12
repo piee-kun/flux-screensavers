@@ -25,8 +25,9 @@ raw-window-handle = "0.4"
 sdl2-sys = "0.35.2"
 
 [dependencies.flux]
+version = "4"
 git = "https://github.com/sandydoo/flux"
-tag = "v3.1.1"
+tag = "v4.1.0"
 
 [dependencies.sdl2]
 version = "0.35.2"
@@ -44,4 +45,4 @@ winres = "0.1.12"
 winres = { git = "https://github.com/sandydoo/winres", branch = "bugfix/fix-linking" }
 
 # [patch."https://github.com/sandydoo/flux"]
-# flux = { version = "3", path = "../../flux/flux" }
+# flux = { version = "4", path = "../../flux/flux" }

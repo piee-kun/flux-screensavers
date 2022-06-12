@@ -104,19 +104,20 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
     let settings = Rc::new(Settings {
         mode: settings::Mode::Normal,
+        fluid_size: 128,
+        fluid_frame_rate: 60.0,
+        fluid_timestep: 1.0 / 60.0,
         viscosity: 5.0,
         velocity_dissipation: 0.0,
-        starting_pressure: settings::StartingPressure::Inherit,
-        fluid_size: 128,
-        fluid_simulation_frame_rate: 60.0,
-        diffusion_iterations: 5,
-        pressure_iterations: 20,
+        clear_pressure: settings::ClearPressure::KeepPressure,
+        diffusion_iterations: 3,
+        pressure_iterations: 19,
         color_scheme: ColorScheme::Peacock,
-        line_length: 300.0,
-        line_width: 5.0,
-        line_begin_offset: 0.5,
-        line_variance: 0.5,
-        grid_spacing: 21,
+        line_length: 550.0,
+        line_width: 10.0,
+        line_begin_offset: 0.4,
+        line_variance: 0.45,
+        grid_spacing: 15,
         view_scale: 1.6,
         noise_channels: vec![
             Noise {
@@ -127,12 +128,12 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             Noise {
                 scale: 15.0,
                 multiplier: 0.7,
-                offset_increment: 0.0015,
+                offset_increment: 0.0015 * 6.0,
             },
             Noise {
                 scale: 30.0,
                 multiplier: 0.5,
-                offset_increment: 0.0015,
+                offset_increment: 0.0015 * 12.0,
             },
         ],
     });

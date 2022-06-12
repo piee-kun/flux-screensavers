@@ -90,14 +90,15 @@ dependencies = [
 
 [[package]]
 name = "flux"
-version = "3.0.0"
-source = "git+https://github.com/sandydoo/flux?tag=v3.0.0#d9de08ff184cd7e27243195930579e2a4d652e73"
+version = "4.1.0"
+source = "git+https://github.com/sandydoo/flux?tag=v4.1.0#93c9617ed696f02ad1a72e6fb959d55722910f36"
 dependencies = [
  "bytemuck",
  "crevice",
  "getrandom",
  "glow",
  "half",
+ "log",
  "mint",
  "nalgebra 0.31.0",
  "rand",
