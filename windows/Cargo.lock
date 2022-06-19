@@ -138,7 +138,7 @@ dependencies = [
 
 [[package]]
 name = "flux-screensaver-windows"
-version = "1.0.2"
+version = "1.1.0"
 dependencies = [
  "env_logger",
  "flux",
