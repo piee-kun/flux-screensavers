@@ -11,20 +11,21 @@ import OpenGL.GL3
 let SETTINGS = """
 {
     "mode": "Normal",
+    "fluidSize": 128,
+    "fluidFrameRate": 60,
+    "fluidTimestep": 0.01666667,
     "viscosity": 5.0,
     "velocityDissipation": 0.0,
-    "startingPressure": "Inherit",
-    "fluidSize": 128,
-    "fluidSimulationFrameRate": 60.0,
-    "diffusionIterations": 5,
-    "pressureIterations": 20,
+    "clearPressure": "KeepPressure",
+    "diffusionIterations": 3,
+    "pressureIterations": 19,
     "colorScheme": "Peacock",
-    "lineLength": 300.0,
-    "lineWidth": 5.0,
-    "lineBeginOffset": 0.5,
-    "lineVariance": 0.5,
+    "lineLength": 550.0,
+    "lineWidth": 10.0,
+    "lineBeginOffset": 0.4,
+    "lineVariance": 0.45,
     "viewScale": 1.6,
-    "gridSpacing": 21,
+    "gridSpacing": 15,
     "noiseChannels": [
         {
             "scale": 2.5,
@@ -34,12 +35,12 @@ let SETTINGS = """
         {
             "scale": 15.0,
             "multiplier": 0.7,
-            "offsetIncrement": 0.0015
+            "offsetIncrement": 0.009
         },
         {
             "scale": 30.0,
             "multiplier": 0.5,
-            "offsetIncrement": 0.0015
+            "offsetIncrement": 0.018
         }
     ]
 }
