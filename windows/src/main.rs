@@ -12,10 +12,10 @@ use std::rc::Rc;
 #[cfg(windows)]
 use winapi::shared::windef::HWND;
 
-const BASE_DPI: u32 = 96;
+const BASE_DPI: f64 = 96.0;
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: i32 = 10;
 
-const SETTINGS_COMING_SOON_MESSAGE: &'static str = r#"
+const SETTINGS_COMING_SOON_MESSAGE: &str = r#"
     Coming soon!
 
     You’ll be able to personalise the screensaver here and make it your own, but it’s not quite ready yet.
@@ -78,7 +78,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
         show_simple_message_box(
             MessageBoxFlag::INFORMATION,
             "Flux Settings",
-            &SETTINGS_COMING_SOON_MESSAGE,
+            SETTINGS_COMING_SOON_MESSAGE,
             None,
         )
         .map_err(|msg| format!("Can’t open a message box: {}", msg))?;
@@ -188,12 +188,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 _ => (),
             }
 
-            let (_, dpi, _) =
-                video_subsystem.display_dpi(preview_window.display_index().unwrap_or(0))?;
-            let scale_factor = dpi as f64 / BASE_DPI as f64;
-            let (physical_width, physical_height) = preview_window.drawable_size();
-            let logical_width = (physical_width as f64 / scale_factor) as u32;
-            let logical_height = (physical_height as f64 / scale_factor) as u32;
+            let surface = Surface::from_window(&video_subsystem, &preview_window)?;
 
             let context = preview_window.gl_create_context()?;
             let glow_context = unsafe {
@@ -204,6 +199,9 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             log::debug!("{:?}", glow_context.version());
 
             preview_window.gl_make_current(&context)?;
+
+            let (logical_width, logical_height) = surface.logical_size();
+            let (physical_width, physical_height) = surface.physical_size();
             let flux = Flux::new(
                 &Rc::new(glow_context),
                 logical_width,
@@ -226,68 +224,60 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             }
         }
         Mode::Screensaver => {
-            let display_count = video_subsystem.num_video_displays()?;
-            log::debug!("Detected {} displays", display_count);
+            let instances = Surface::detect_displays(&video_subsystem)?
+                .into_iter()
+                .map(|surface| {
+                    let (logical_width, logical_height) = surface.logical_size();
+                    let (physical_width, physical_height) = surface.physical_size();
 
-            let mut instances = Vec::with_capacity(display_count as usize);
-            for display_index in 0..display_count {
-                let (_, dpi, _) = video_subsystem.display_dpi(display_index)?;
-                let scale_factor = dpi as f64 / BASE_DPI as f64;
-                let bounds = video_subsystem.display_bounds(display_index)?;
-                let (physical_width, physical_height) = bounds.size();
-                let logical_width = (physical_width as f64 / scale_factor) as u32;
-                let logical_height = (physical_height as f64 / scale_factor) as u32;
+                    log::debug!(
+                        "Surface:\nPhysical size: {}x{}, Logical size: {}x{}, Position: {} {}, DPI: {}, Scaling: {}",
+                        physical_width,
+                        physical_height,
+                        logical_width,
+                        logical_height,
+                        surface.bounds.x(),
+                        surface.bounds.y(),
+                        surface.dpi,
+                        surface.scale_factor,
+                    );
 
-                log::debug!(
-                    "Display: {}\nPhysical size: {}x{}, Logical size: {}x{}, Position: {} {}, DPI: {}",
-                    display_index,
-                    physical_width,
-                    physical_height,
-                    logical_width,
-                    logical_height,
-                    bounds.x(),
-                    bounds.y(),
-                    dpi
-                );
+                    // Create the SDL window
+                    let window = video_subsystem
+                        .window("Flux", physical_width, physical_height)
+                        .position(surface.bounds.x(), surface.bounds.y())
+                        .input_grabbed()
+                        .borderless()
+                        .allow_highdpi()
+                        .opengl()
+                        .build()
+                        .map_err(|err| err.to_string())?;
 
-                // Create the SDL window
-                let window = video_subsystem
-                    .window("Flux", physical_width, physical_height)
-                    .position(bounds.x(), bounds.y())
-                    .input_grabbed()
-                    .fullscreen_desktop()
-                    .allow_highdpi()
-                    .opengl()
-                    .build()
+                    let context = window.gl_create_context()?;
+                    let glow_context = unsafe {
+                        glow::Context::from_loader_function(|s| {
+                            video_subsystem.gl_get_proc_address(s) as *const _
+                        })
+                    };
+                    log::debug!("{:?}", glow_context.version());
+
+                    window.gl_make_current(&context)?;
+                    let flux = Flux::new(
+                        &Rc::new(glow_context),
+                        logical_width,
+                        logical_height,
+                        physical_width,
+                        physical_height,
+                        &settings,
+                    )
                     .map_err(|err| err.to_string())?;
 
-                let context = window.gl_create_context()?;
-                let glow_context = unsafe {
-                    glow::Context::from_loader_function(|s| {
-                        video_subsystem.gl_get_proc_address(s) as *const _
+                    Ok(Instance {
+                        flux,
+                        context,
+                        window,
                     })
-                };
-                log::debug!("{:?}", glow_context.version());
-
-                window.gl_make_current(&context)?;
-                let flux = Flux::new(
-                    &Rc::new(glow_context),
-                    logical_width,
-                    logical_height,
-                    physical_width,
-                    physical_height,
-                    &settings,
-                )
-                .map_err(|err| err.to_string())?;
-
-                let instance = Instance {
-                    flux,
-                    context,
-                    window,
-                };
-
-                instances.push(instance)
-            }
+                }).collect::<Result<Vec<Instance>, String>>()?;
 
             // Hide the cursor and report relative mouse movements.
             sdl_context.mouse().set_relative_mouse_mode(true);
@@ -388,7 +378,7 @@ fn read_flags() -> Result<Mode, String> {
         Some("/p") => {
             let handle_ptr = std::env::args()
                 .nth(2)
-                .ok_or_else(|| "I can’t find the window to show a screensaver preview.")?
+                .ok_or("I can’t find the window to show a screensaver preview.")?
                 .parse::<usize>()
                 .map_err(|e| e.to_string())?;
 
@@ -400,6 +390,114 @@ fn read_flags() -> Result<Mode, String> {
         Some(s) => {
             return Err(format!("I don’t know what the argument {} is.", s));
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+struct Surface {
+    dpi: f64,
+    scale_factor: f64,
+    bounds: sdl2::rect::Rect,
+}
+
+impl Surface {
+    pub fn physical_size(&self) -> (u32, u32) {
+        self.bounds.size()
+    }
+
+    pub fn logical_size(&self) -> (u32, u32) {
+        let (physical_width, physical_height) = self.bounds.size();
+        let logical_width = (physical_width as f64 / self.scale_factor) as u32;
+        let logical_height = (physical_height as f64 / self.scale_factor) as u32;
+        (logical_width, logical_height)
+    }
+
+    pub fn from_display_id(
+        video_subsystem: &sdl2::VideoSubsystem,
+        id: i32,
+    ) -> Result<Self, String> {
+        let bounds = video_subsystem.display_bounds(id)?;
+        let (_, dpi, _) = video_subsystem.display_dpi(id)?;
+        Ok(Self::from_bounds(bounds, dpi as f64))
+    }
+
+    pub fn from_window(
+        video_subsystem: &sdl2::VideoSubsystem,
+        window: &sdl2::video::Window,
+    ) -> Result<Self, String> {
+        let id = window.display_index().unwrap_or(0);
+        let (x, y) = window.position();
+        let (width, height) = window.size();
+        let bounds = sdl2::rect::Rect::new(x, y, width, height);
+        let (_, dpi, _) = video_subsystem.display_dpi(id)?;
+
+        Ok(Self::from_bounds(bounds, dpi.into()))
+    }
+
+    fn from_bounds(bounds: sdl2::rect::Rect, dpi: f64) -> Self {
+        let scale_factor = dpi / BASE_DPI;
+        Surface {
+            dpi,
+            scale_factor,
+            bounds,
+        }
+    }
+
+    fn union(&self, other: Self) -> Self {
+        Self {
+            dpi: self.dpi,
+            scale_factor: self.scale_factor,
+            bounds: self.bounds.union(other.bounds),
+        }
+    }
+
+    /// Detect and query all displays. We check if the displays are matching, in
+    /// which case we combine them into a single spanning display.
+    pub fn detect_displays(video_subsystem: &sdl2::VideoSubsystem) -> Result<Vec<Surface>, String> {
+        let display_count = video_subsystem.num_video_displays()?;
+        log::debug!("Detected {} displays", display_count);
+
+        let mut displays = Vec::with_capacity(display_count as usize);
+        for id in 0..display_count {
+            displays.push(Surface::from_display_id(video_subsystem, id)?);
+        }
+
+        Ok(Surface::combine_displays(&displays))
+    }
+
+    /// Combine multiple displays into a single surface, where possible. This is
+    /// kind of like a scan-line algorithm. We first merge along the x-axis, and
+    /// then merge the y-axis.
+    ///
+    /// This will only combine identical displays arranged in a rectangle. It
+    /// won’t try to cover all displays if you have some weird setup.
+    fn combine_displays(surfaces: &[Surface]) -> Vec<Surface> {
+        let horizontally_merged = Self::merge_edges(surfaces, |surface| {
+            (surface.bounds.top(), surface.bounds.bottom())
+        });
+        let mut fully_merged = Self::merge_edges(&horizontally_merged, |surface| {
+            (surface.bounds.left(), surface.bounds.right())
+        });
+        fully_merged.sort_by_key(|s| s.bounds.x());
+        fully_merged
+    }
+
+    fn merge_edges<T>(surfaces: &[Surface], get_edges: T) -> Vec<Surface>
+    where
+        T: Fn(&Surface) -> (i32, i32),
+    {
+        use std::collections::HashMap;
+
+        let mut surface_map: HashMap<(i32, i32), Surface> = HashMap::new();
+        surfaces.iter().for_each(|surface| {
+            let edges = get_edges(surface);
+            let new_surface = match surface_map.get(&edges) {
+                Some(existing_surface) => existing_surface.union(*surface),
+                None => *surface,
+            };
+            surface_map.insert(edges, new_surface);
+        });
+        surface_map.into_values().collect::<Vec<Surface>>()
     }
 }
 
@@ -452,5 +550,111 @@ pub fn set_dpi_awareness() -> Result<(), String> {
                 _ => Err("Can’t enable support for high-resolution screens. The setting has been modified and set to an unsupported value.".to_string()),
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use sdl2::rect::Rect;
+
+    #[test]
+    fn it_does_not_combine_two_different_displays() {
+        let display0 = Surface::from_bounds(Rect::new(0, 0, 3360, 2100), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(
+            Rect::new(display0.bounds.width() as i32, 0, 2560, 1440),
+            BASE_DPI as f64,
+        );
+
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1]),
+            vec![display0, display1]
+        );
+    }
+
+    #[test]
+    fn it_partially_combines_two_1440p_displays_and_a_separate_laptop_display() {
+        // 1440p + 1440p + laptop
+        let display0 = Surface::from_bounds(Rect::new(-2560, 0, 2560, 1440), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
+        let display2 = Surface::from_bounds(Rect::new(2560, 0, 3360, 2100), BASE_DPI as f64);
+
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1, display2]),
+            vec![
+                Surface::from_bounds(Rect::new(-2560, 0, 5120, 1440), BASE_DPI as f64),
+                display2
+            ]
+        );
+
+        // laptop + 1440p + 1440p
+        let display2 = Surface::from_bounds(Rect::new(-1920, 360, 1920, 1080), BASE_DPI as f64);
+        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
+
+        assert_eq!(
+            Surface::combine_displays(&[display2, display0, display1]),
+            vec![
+                display2,
+                Surface::from_bounds(Rect::new(0, 0, 5120, 1440), BASE_DPI as f64),
+            ]
+        );
+    }
+
+    #[test]
+    fn it_combines_two_1440p_displays() {
+        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(
+            Rect::new(display0.bounds.width() as i32, 0, 2560, 1440),
+            BASE_DPI as f64,
+        );
+
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1]),
+            vec![Surface::from_bounds(
+                Rect::new(0, 0, 5120, 1440),
+                BASE_DPI as f64
+            )]
+        );
+    }
+
+    #[test]
+    fn it_combines_three_1440p_displays() {
+        let display0 = Surface::from_bounds(Rect::new(-2560, 0, 2560, 1440), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
+        let display2 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
+
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1, display2]),
+            vec![Surface::from_bounds(
+                Rect::new(-2560, 0, 2560 * 3, 1440),
+                BASE_DPI as f64
+            )]
+        );
+    }
+
+    #[test]
+    fn it_combines_a_grid_of_displays() {
+        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
+        let display1 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
+        let display2 = Surface::from_bounds(Rect::new(0, 1440, 2560, 1440), BASE_DPI as f64);
+        let display3 = Surface::from_bounds(Rect::new(2560, 1440, 2560, 1440), BASE_DPI as f64);
+
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1, display2, display3]),
+            vec![Surface::from_bounds(
+                Rect::new(0, 0, 2560 * 2, 1440 * 2),
+                BASE_DPI as f64
+            ),]
+        );
+
+        let laptop = Surface::from_bounds(Rect::new(2560 * 2, 0, 1920, 1080), BASE_DPI as f64);
+        assert_eq!(
+            Surface::combine_displays(&[display0, display1, display2, display3, laptop]),
+            vec![
+                Surface::from_bounds(Rect::new(0, 0, 2560 * 2, 1440 * 2), BASE_DPI as f64),
+                laptop
+            ]
+        );
     }
 }
