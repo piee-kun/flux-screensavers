@@ -1,11 +1,11 @@
 <a href="https://flux.sandydoo.me/">
-  <img width="100%" src="https://github.com/sandydoo/gif-storage/blob/main/flux/social-header-2022-02-03.gif" alt="Flux" />
+  <img width="100%" src="https://github.com/sandydoo/gif-storage/blob/main/flux/social-header-2022-06-27.webp" alt="Flux" />
 </a>
 
 # Screensavers for Flux
 
-#### [You can now buy Flux as a Windows screensaver →][store]
-Enjoy staring at it for hours as your computer idles and help support development. More platforms coming soon!
+#### [Buy Flux as a Windows screensaver →][store]
+Help support development by letting your PC idle with style. More platforms coming soon!
 
 ---
 
@@ -19,7 +19,7 @@ This repository contains:
   - [Windows](#windows)
   - ~Linux~
 
-## Build for platform
+## Build
 
 ### macOS
 
