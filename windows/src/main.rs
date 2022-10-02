@@ -11,6 +11,8 @@ use std::rc::Rc;
 #[cfg(windows)]
 use glutin::platform::windows::WindowBuilderExtWindows;
 #[cfg(windows)]
+use winapi;
+#[cfg(windows)]
 use winapi::shared::windef::HWND;
 
 const BASE_DPI: f64 = 96.0;
@@ -23,12 +25,12 @@ enum Mode {
     Settings,
 }
 
-struct Instance {
+struct Instance<W> {
     flux: Flux,
-    context: glutin::ContextWrapper<glutin::PossiblyCurrent, glutin::window::Window>,
+    context: glutin::ContextWrapper<glutin::PossiblyCurrent, W>,
 }
 
-impl Instance {
+impl<W> Instance<W> {
     pub fn draw(&mut self, timestamp: f64) {
         self.flux.animate(timestamp);
         self.context.swap_buffers().expect("swap OpenGL buffers");
@@ -36,8 +38,11 @@ impl Instance {
 }
 
 enum WindowMode {
-    AllDisplays(Vec<Instance>),
-    PreviewWindow { instance: Instance },
+    AllDisplays(Vec<Instance<glutin::window::Window>>),
+    PreviewWindow {
+        window: glutin::window::Window,
+        instance: Instance<()>,
+    },
 }
 
 // TODO: log the error on disk
@@ -169,7 +174,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
                     Ok(Instance { flux, context })
                 })
-                .collect::<Result<Vec<Instance>, String>>()?;
+                .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
 
             WindowMode::AllDisplays(instances)
         }
@@ -191,6 +196,16 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                     WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
+
+                Event::MainEventsCleared => {
+                    let timestamp = start.elapsed().as_secs_f64() * 1000.0;
+                    match window_mode {
+                        WindowMode::PreviewWindow {
+                            ref mut instance, ..
+                        } => instance.draw(timestamp),
+                        _ => panic!("Unexpected window mode"),
+                    }
+                }
 
                 _ => (),
             },
@@ -294,7 +309,7 @@ fn read_flags() -> Result<Mode, String> {
         Some("/p") => {
             let handle_ptr = std::env::args()
                 .nth(2)
-                .ok_or("I can’t find the window to show a screensaver preview.")?
+                .ok_or("I can’t find the window to show the screensaver preview.")?
                 .parse::<usize>()
                 .map_err(|e| e.to_string())?;
 
@@ -319,21 +334,56 @@ fn new_preview_window(
         _ => return Err("This platform is not supported yet".to_string()),
     };
 
+    let hwnd = unsafe { std::mem::transmute(preview_window_handle) };
+    let mut rect = winapi::shared::windef::RECT {
+        left: 0,
+        top: 0,
+        right: 0,
+        bottom: 0,
+    };
+    unsafe {
+        winapi::um::winuser::GetClientRect(hwnd, &mut rect);
+    }
+
     let window_builder = glutin::window::WindowBuilder::new()
         .with_title("Flux Preview")
         .with_parent_window(preview_window_handle as isize)
+        .with_inner_size(glutin::dpi::Size::Physical(glutin::dpi::PhysicalSize::new(
+            rect.right as u32,
+            rect.bottom as u32,
+        )))
         .with_decorations(false);
 
-    let context = glutin::ContextBuilder::new()
-        .build_windowed(window_builder, &event_loop)
-        .map_err(|err| err.to_string())?;
-    let context = unsafe { context.make_current().unwrap() };
+    let window = window_builder.build(&event_loop).unwrap();
+
+    let context = unsafe {
+        use glutin::platform::windows::{RawContextExt, WindowExtWindows};
+
+        let hwnd = window.hwnd();
+        glutin::ContextBuilder::new()
+            .with_vsync(true)
+            .with_gl_profile(glutin::GlProfile::Core)
+            // .with_gl(glutin::GlRequest::Latest)
+            .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
+            .with_multisampling(0)
+            .with_double_buffer(Some(true))
+            .build_raw_context(hwnd)
+            .unwrap()
+    };
+
+    let context = unsafe { context.make_current().expect("make OpenGL context current") };
+
     let glow_context =
         unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s) as *const _) };
     log::debug!("{:?}", glow_context.version());
 
-    let physical_size = context.window().inner_size();
-    let scale_factor = context.window().scale_factor() / BASE_DPI;
+    unsafe {
+        glow_context.clear_color(1.0, 0.0, 0.0, 1.0);
+        glow_context.clear(glow::COLOR_BUFFER_BIT);
+    }
+
+    let physical_size = window.inner_size();
+    let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
     let flux = Flux::new(
         &Rc::new(glow_context),
@@ -347,7 +397,7 @@ fn new_preview_window(
 
     let instance = Instance { flux, context };
 
-    Ok(WindowMode::PreviewWindow { instance })
+    Ok(WindowMode::PreviewWindow { window, instance })
 }
 
 // #[derive(Clone, Copy, Debug, PartialEq)]

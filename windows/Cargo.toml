@@ -7,6 +7,10 @@ repository = "https://github.com/sandydoo/flux-screensavers/"
 edition = "2021"
 build = "build.rs"
 
+[[bin]]
+name = "Flux"
+path = "src/main.rs"
+
 [package.metadata.winres]
 ProductName = "Flux"
 FileDescription = "An ode to the macOS Drift screensaver"
