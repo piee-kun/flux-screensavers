@@ -1,10 +1,9 @@
 // Disable the console window that pops up when you launch the .exe
 // #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use core::ffi::c_void;
 use flux::{settings::*, *};
 use glow::HasContext;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+use raw_window_handle::RawWindowHandle;
 use std::fs::File;
 use std::rc::Rc;
 
@@ -15,15 +14,11 @@ use winapi;
 #[cfg(windows)]
 use winapi::shared::windef::HWND;
 
+mod cli;
+use cli::Mode;
+
 const BASE_DPI: f64 = 96.0;
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
-
-#[derive(PartialEq)]
-enum Mode {
-    Preview(RawWindowHandle),
-    Screensaver,
-    Settings,
-}
 
 struct Instance<W> {
     flux: Flux,
@@ -41,7 +36,7 @@ enum WindowMode {
     AllDisplays(Vec<Instance<glutin::window::Window>>),
     PreviewWindow {
         window: glutin::window::Window,
-        instance: Instance<()>,
+        instance: Box<Instance<()>>,
     },
 }
 
@@ -64,7 +59,7 @@ fn main() {
     ])
     .expect("set up logging");
 
-    match read_flags().and_then(run_flux) {
+    match cli::read_flags().and_then(run_flux) {
         Ok(_) => std::process::exit(0),
         Err(err) => {
             log::error!("{}", err);
@@ -132,48 +127,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
         Mode::Screensaver => {
             let instances = event_loop
                 .available_monitors()
-                .map(|monitor| {
-                    let window_builder = glutin::window::WindowBuilder::new()
-                        .with_title("Flux")
-                        .with_inner_size(monitor.size())
-                        .with_position(monitor.position())
-                        .with_maximized(true)
-                        .with_decorations(false);
-                    let context = glutin::ContextBuilder::new()
-                        .with_vsync(true)
-                        .with_gl_profile(glutin::GlProfile::Core)
-                        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
-                        .with_multisampling(0)
-                        .with_double_buffer(Some(true))
-                        .build_windowed(window_builder, &event_loop)
-                        .map_err(|err| err.to_string())?;
-                    let context =
-                        unsafe { context.make_current().expect("make OpenGL context current") };
-
-                    context.window().set_cursor_visible(false);
-
-                    let glow_context = unsafe {
-                        glow::Context::from_loader_function(|s| {
-                            context.get_proc_address(s) as *const _
-                        })
-                    };
-                    log::debug!("{:?}", glow_context.version());
-
-                    let physical_size = monitor.size();
-                    let scale_factor = monitor.scale_factor();
-                    let logical_size = physical_size.to_logical(scale_factor);
-                    let flux = Flux::new(
-                        &Rc::new(glow_context),
-                        logical_size.width,
-                        logical_size.height,
-                        physical_size.width,
-                        physical_size.height,
-                        &settings,
-                    )
-                    .map_err(|err| err.to_string())?;
-
-                    Ok(Instance { flux, context })
-                })
+                .map(|monitor| new_instance(&event_loop, &settings, &monitor))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
 
             WindowMode::AllDisplays(instances)
@@ -183,7 +137,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
     let start = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        use glutin::event::{DeviceEvent, Event, KeyboardInput, VirtualKeyCode, WindowEvent};
+        use glutin::event::{DeviceEvent, Event, KeyboardInput, WindowEvent};
         use glutin::event_loop::ControlFlow;
 
         *control_flow = ControlFlow::Poll;
@@ -192,10 +146,11 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             Mode::Preview(_) => match event {
                 Event::LoopDestroyed => (),
 
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => *control_flow = ControlFlow::Exit,
-                    _ => (),
-                },
+                Event::WindowEvent { event, .. } => {
+                    if event == WindowEvent::CloseRequested {
+                        *control_flow = ControlFlow::Exit
+                    }
+                }
 
                 Event::MainEventsCleared => {
                     let timestamp = start.elapsed().as_secs_f64() * 1000.0;
@@ -227,9 +182,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                     }
                 }
 
-                Event::WindowEvent {
-                    event, window_id, ..
-                } => match event {
+                Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested => {
                         log::debug!("Close requested, for some reason");
                         *control_flow = ControlFlow::Exit;
@@ -274,56 +227,6 @@ fn run_flux(mode: Mode) -> Result<(), String> {
     });
 }
 
-fn read_flags() -> Result<Mode, String> {
-    match std::env::args().nth(1).as_mut().map(|s| {
-        s.make_ascii_lowercase();
-        s.as_str()
-    }) {
-        // Settings panel
-        //
-        // /c -> you’re supposed to support this, but AFAIK the only way to get
-        // this is to manually send it from the command line.
-        //
-        // /c:HWND -> the screensaver configuration window gives a window
-        // handle. I’m not sure what it’s for. Maybe you’re supposed to use it
-        // to close your settings window if the parent windows closes?
-        //
-        // No flags -> <right click + configure> sends no flags whatsoever.
-        Some("/c") => Ok(Mode::Settings),
-        Some(s) if s.starts_with("/c:") => Ok(Mode::Settings),
-
-        // Run screensaver
-        //
-        // /s -> run the screensaver.
-        //
-        // /S -> <right click + test> sends an uppercase /S, which doesn’t
-        // seem to be documented anywhere.
-        Some("/s") | None => Ok(Mode::Screensaver),
-
-        // Run preview
-        //
-        // /p HWND -> draw the screensaver in the preview window.
-        //
-        // /p:HWND -> TODO: apparently, this is also an option you need to
-        // support.
-        Some("/p") => {
-            let handle_ptr = std::env::args()
-                .nth(2)
-                .ok_or("I can’t find the window to show the screensaver preview.")?
-                .parse::<usize>()
-                .map_err(|e| e.to_string())?;
-
-            let mut handle = raw_window_handle::Win32Handle::empty();
-            handle.hwnd = handle_ptr as *mut c_void;
-            Ok(Mode::Preview(RawWindowHandle::Win32(handle)))
-        }
-
-        Some(s) => {
-            return Err(format!("I don’t know what the argument {} is.", s));
-        }
-    }
-}
-
 fn new_preview_window(
     event_loop: &glutin::event_loop::EventLoop<()>,
     raw_window_handle: &RawWindowHandle,
@@ -354,7 +257,7 @@ fn new_preview_window(
         )))
         .with_decorations(false);
 
-    let window = window_builder.build(&event_loop).unwrap();
+    let window = window_builder.build(event_loop).unwrap();
 
     let context = unsafe {
         use glutin::platform::windows::{RawContextExt, WindowExtWindows};
@@ -377,11 +280,6 @@ fn new_preview_window(
         unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s) as *const _) };
     log::debug!("{:?}", glow_context.version());
 
-    unsafe {
-        glow_context.clear_color(1.0, 0.0, 0.0, 1.0);
-        glow_context.clear(glow::COLOR_BUFFER_BIT);
-    }
-
     let physical_size = window.inner_size();
     let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
@@ -391,13 +289,59 @@ fn new_preview_window(
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        &settings,
+        settings,
     )
     .map_err(|err| err.to_string())?;
 
     let instance = Instance { flux, context };
 
-    Ok(WindowMode::PreviewWindow { window, instance })
+    Ok(WindowMode::PreviewWindow {
+        window,
+        instance: Box::new(instance),
+    })
+}
+
+fn new_instance(
+    event_loop: &glutin::event_loop::EventLoop<()>,
+    settings: &Rc<Settings>,
+    monitor: &glutin::monitor::MonitorHandle,
+) -> Result<Instance<glutin::window::Window>, String> {
+    let window_builder = glutin::window::WindowBuilder::new()
+        .with_title("Flux")
+        .with_inner_size(monitor.size())
+        .with_position(monitor.position())
+        .with_maximized(true)
+        .with_decorations(false);
+    let context = glutin::ContextBuilder::new()
+        .with_vsync(true)
+        .with_gl_profile(glutin::GlProfile::Core)
+        .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
+        .with_multisampling(0)
+        .with_double_buffer(Some(true))
+        .build_windowed(window_builder, event_loop)
+        .map_err(|err| err.to_string())?;
+    let context = unsafe { context.make_current().expect("make OpenGL context current") };
+
+    context.window().set_cursor_visible(false);
+
+    let glow_context =
+        unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s) as *const _) };
+    log::debug!("{:?}", glow_context.version());
+
+    let physical_size = monitor.size();
+    let scale_factor = monitor.scale_factor();
+    let logical_size = physical_size.to_logical(scale_factor);
+    let flux = Flux::new(
+        &Rc::new(glow_context),
+        logical_size.width,
+        logical_size.height,
+        physical_size.width,
+        physical_size.height,
+        settings,
+    )
+    .map_err(|err| err.to_string())?;
+
+    Ok(Instance { flux, context })
 }
 
 // #[derive(Clone, Copy, Debug, PartialEq)]
