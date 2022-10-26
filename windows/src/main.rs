@@ -31,12 +31,12 @@ impl<W> Instance<W> {
 enum WindowMode {
     AllDisplays(Vec<Instance<glutin::window::Window>>),
     PreviewWindow {
+        #[allow(dead_code)]
         window: glutin::window::Window,
         instance: Box<Instance<()>>,
     },
 }
 
-// TODO: log the error on disk
 fn main() {
     use simplelog::*;
 
@@ -50,6 +50,7 @@ fn main() {
         WriteLogger::new(
             LevelFilter::Debug,
             Config::default(),
+            // TODO: move to cache dir
             File::create("flux_screensaver.log").unwrap(),
         ),
     ])
@@ -121,7 +122,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
     let start = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        use glutin::event::{DeviceEvent, Event, KeyboardInput, WindowEvent};
+        use glutin::event::{DeviceEvent, Event, WindowEvent};
         use glutin::event_loop::ControlFlow;
 
         *control_flow = ControlFlow::Poll;
@@ -167,26 +168,9 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 }
 
                 Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested => {
-                        log::debug!("Close requested, for some reason");
-                        *control_flow = ControlFlow::Exit;
-                    }
-                    WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                scancode, state, ..
-                            },
-                        ..
-                    } => {
-                        log::debug!("Keyboard input {:?} {:?}", scancode, state);
-                        if state == glutin::event::ElementState::Pressed {
-                            *control_flow = ControlFlow::Exit
-                        }
-                    }
-                    WindowEvent::MouseInput { state, button, .. } => {
-                        log::debug!("Mouse input! {:?} {:?}", state, button);
-                        *control_flow = ControlFlow::Exit
-                    }
+                    WindowEvent::CloseRequested { .. }
+                    | WindowEvent::KeyboardInput { .. }
+                    | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
 
@@ -199,7 +183,6 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 } if f64::max(xrel.abs(), yrel.abs())
                     > MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER =>
                 {
-                    log::debug!("Mouse moved!");
                     *control_flow = ControlFlow::Exit
                 }
 
