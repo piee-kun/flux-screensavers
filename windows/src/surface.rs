@@ -29,8 +29,8 @@ impl Surface {
             self.position.y.min(surface.position.y),
         );
         self.size = PhysicalSize::new(
-            self.size.width.max(surface.size.width),
-            self.size.width.max(surface.size.height),
+            self.size.width + surface.size.width,
+            self.size.height + surface.size.height,
         );
     }
 }
