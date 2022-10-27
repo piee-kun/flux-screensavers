@@ -1,5 +1,5 @@
 // Disable the console window that pops up when you launch the .exe
-// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 use flux::{settings::*, *};
 use glow::HasContext;
@@ -177,8 +177,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested { .. }
                     | WindowEvent::KeyboardInput { .. }
-                    | WindowEvent::MouseInput { .. } => {
-                    }
+                    | WindowEvent::MouseInput { .. } => {}
                     _ => (),
                 },
 
