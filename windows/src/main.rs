@@ -6,6 +6,7 @@ use glow::HasContext;
 use raw_window_handle::RawWindowHandle;
 use std::fs::File;
 use std::rc::Rc;
+use takeable::Takeable;
 
 #[cfg(windows)]
 use glutin::platform::windows::WindowBuilderExtWindows;
@@ -18,11 +19,17 @@ const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
 struct Instance<W> {
     flux: Flux,
-    context: glutin::ContextWrapper<glutin::PossiblyCurrent, W>,
+    context: Takeable<glutin::ContextWrapper<glutin::PossiblyCurrent, W>>,
 }
 
-impl<W> Instance<W> {
+impl<W> Instance<W>
+where
+    W: std::fmt::Debug,
+{
     pub fn draw(&mut self, timestamp: f64) {
+        let context = self.context.take();
+        self.context =
+            unsafe { Takeable::new(context.make_current().expect("make OpenGL context current")) };
         self.flux.animate(timestamp);
         self.context.swap_buffers().expect("swap OpenGL buffers");
     }
@@ -110,12 +117,16 @@ fn run_flux(mode: Mode) -> Result<(), String> {
             new_preview_window(&event_loop, &raw_window_handle, &settings)?
         }
         Mode::Screensaver => {
-            let surfaces = surface::combine_monitors(event_loop.available_monitors().collect());
+            let monitors = event_loop.available_monitors().collect();
+            log::debug!("Available monitors: {:?}", monitors);
+
+            let surfaces = surface::combine_monitors(monitors);
+            log::debug!("Creating windows: {:?}", surfaces);
+
             let instances = surfaces
                 .iter()
                 .map(|surface| new_instance(&event_loop, &settings, surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
-
             WindowMode::AllDisplays(instances)
         }
     };
@@ -129,8 +140,6 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
         match mode {
             Mode::Preview(_) => match event {
-                Event::LoopDestroyed => (),
-
                 Event::WindowEvent { event, .. } => {
                     if event == WindowEvent::CloseRequested {
                         *control_flow = ControlFlow::Exit
@@ -147,12 +156,12 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                     }
                 }
 
+                Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
+
                 _ => (),
             },
 
             Mode::Screensaver => match event {
-                Event::LoopDestroyed => (),
-
                 Event::MainEventsCleared => {
                     let timestamp = start.elapsed().as_secs_f64() * 1000.0;
                     match window_mode {
@@ -161,16 +170,15 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                                 instance.draw(timestamp);
                             }
                         }
-                        WindowMode::PreviewWindow {
-                            ref mut instance, ..
-                        } => instance.draw(timestamp),
+                        _ => panic!("Unexpected window mode"),
                     }
                 }
 
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested { .. }
                     | WindowEvent::KeyboardInput { .. }
-                    | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
+                    | WindowEvent::MouseInput { .. } => {
+                    }
                     _ => (),
                 },
 
@@ -233,7 +241,6 @@ fn new_preview_window(
         glutin::ContextBuilder::new()
             .with_vsync(true)
             .with_gl_profile(glutin::GlProfile::Core)
-            // .with_gl(glutin::GlRequest::Latest)
             .with_gl(glutin::GlRequest::Specific(glutin::Api::OpenGl, (3, 3)))
             .with_multisampling(0)
             .with_double_buffer(Some(true))
@@ -260,7 +267,10 @@ fn new_preview_window(
     )
     .map_err(|err| err.to_string())?;
 
-    let instance = Instance { flux, context };
+    let instance = Instance {
+        flux,
+        context: Takeable::new(context),
+    };
 
     Ok(WindowMode::PreviewWindow {
         window,
@@ -287,6 +297,7 @@ fn new_instance(
         .with_double_buffer(Some(true))
         .build_windowed(window_builder, event_loop)
         .map_err(|err| err.to_string())?;
+
     let context = unsafe { context.make_current().expect("make OpenGL context current") };
 
     context.window().set_cursor_visible(false);
@@ -307,7 +318,10 @@ fn new_instance(
     )
     .map_err(|err| err.to_string())?;
 
-    Ok(Instance { flux, context })
+    Ok(Instance {
+        flux,
+        context: Takeable::new(context),
+    })
 }
 
 // Specifying DPI awareness in the app manifest does not apply when running in a
