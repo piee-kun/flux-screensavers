@@ -1,6 +1,6 @@
 [package]
 name = "flux-screensaver-windows"
-version = "1.2.0"
+version = "1.2.1"
 description = "An open-source tribute to the macOS Drift screensaver"
 authors = ["Sander Melnikov <hey@sandydoo.me"]
 repository = "https://github.com/sandydoo/flux-screensavers/"
