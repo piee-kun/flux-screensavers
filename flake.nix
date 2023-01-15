@@ -2,7 +2,7 @@
   description = "Flux Screensavers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
     flake-utils.url = "github:numtide/flake-utils";
     crane = {
       url = "github:ipetkov/crane";
@@ -21,7 +21,25 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, crane, rust-overlay }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
+    nixpkgs.lib.recursiveUpdate {
+      devShells.aarch64-darwin.default = let
+        pkgs = import nixpkgs {
+          system = "aarch64-darwin";
+          overlays = [ (import rust-overlay) ];
+        };
+
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
+
+        craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
+          rustc = rustToolchain;
+          cargo = rustToolchain;
+          rustfmt = rustToolchain;
+        });
+      in
+      pkgs.mkShell {
+        packages = with pkgs; [ rustToolchain nixfmt ];
+      };
+    } (flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -39,15 +57,13 @@
           rustfmt = rustToolchain;
         });
       in rec {
-        devShells = {
-          default = pkgs.pkgsBuildHost.mkShell {
-            inputsFrom = [ packages.flux-screensaver-windows ];
-            packages = with pkgs.pkgsBuildHost; [ rustToolchain nixfmt ];
-          };
+        devShells.default = pkgs.pkgsBuildHost.mkShell {
+          inputsFrom = [ packages.flux-screensaver-windows ];
+          packages = with pkgs.pkgsBuildHost; [ rustToolchain nixfmt ];
         };
 
-        packages = {
-          default = craneLib.buildPackage rec {
+        packages.default =
+          craneLib.buildPackage rec {
             src = ./windows;
             release = true;
 
@@ -66,6 +82,6 @@
               fi
             '';
           };
-        };
-      });
+        }
+      ));
 }
