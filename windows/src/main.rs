@@ -12,6 +12,7 @@ use takeable::Takeable;
 use glutin::platform::windows::WindowBuilderExtWindows;
 
 mod cli;
+mod settings_window;
 mod surface;
 use cli::Mode;
 
@@ -111,8 +112,11 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
     let event_loop = glutin::event_loop::EventLoop::new();
 
+    if mode == Mode::Settings {
+        settings_window::run();
+    }
+
     let mut window_mode = match mode {
-        Mode::Settings => return Ok(()),
         Mode::Preview(raw_window_handle) => {
             new_preview_window(&event_loop, &raw_window_handle, &settings)?
         }
@@ -129,6 +133,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
+        _ => panic!(),
     };
 
     let start = std::time::Instant::now();

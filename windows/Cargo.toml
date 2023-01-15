@@ -29,6 +29,13 @@ glutin = "0.29.1"
 simplelog = "^0.12.0"
 winit = "0.27.5"
 takeable = "0.2.1"
+iced_glow = "0.6"
+iced_winit = "0.7"
+iced_glutin = "0.6"
+
+[dependencies.iced]
+version = "0.7"
+features = [ "glow" ]
 
 [dependencies.flux]
 version = "4"
