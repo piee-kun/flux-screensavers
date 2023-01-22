@@ -1,16 +1,16 @@
-use glow::*;
-use glutin::dpi::PhysicalPosition;
-use glutin::event::{Event, ModifiersState, WindowEvent};
-use iced::widget::{column, container, pick_list, scrollable, vertical_space};
+use iced::widget::{column, container, pick_list };
 use iced::{Alignment, Element, Length, Sandbox};
-use iced_glow::glow;
-use iced_glutin::conversion;
-use iced_glutin::glutin;
-use iced_glutin::renderer;
-use iced_glutin::{program, Clipboard, Debug, Size};
 
 pub fn run() -> iced::Result {
-    Settings::run(iced::Settings::default())
+    Settings::run(iced::Settings {
+        window: iced::window::Settings {
+            size: (250, 250),
+            resizable: false,
+            decorations: true,
+            ..Default::default()
+        },
+        ..Default::default()
+    })
 }
 
 #[derive(Default)]
@@ -47,16 +47,15 @@ impl Sandbox for Settings {
             .placeholder("Choose a color theme");
 
         let content = column![
-            vertical_space(Length::Units(600)),
-            "Color theme",
+            "Colors",
             pick_list,
-            vertical_space(Length::Units(600)),
         ]
         .width(Length::Fill)
         .align_items(Alignment::Center)
-        .spacing(10);
+        .spacing(10)
+        .padding(10);
 
-        container(scrollable(content))
+        container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()
@@ -65,21 +64,17 @@ impl Sandbox for Settings {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
 enum Color {
+    #[default]
+    Original,
     Plasma,
     Poolside,
     Desktop,
 }
 
 impl Color {
-    const ALL: [Color; 3] = [Color::Plasma, Color::Poolside, Color::Desktop];
-}
-
-impl Default for Color {
-    fn default() -> Color {
-        Color::Plasma
-    }
+    const ALL: [Color; 4] = [Color::Original, Color::Plasma, Color::Poolside, Color::Desktop];
 }
 
 impl std::fmt::Display for Color {
@@ -88,6 +83,7 @@ impl std::fmt::Display for Color {
             f,
             "{}",
             match self {
+                Color::Original => "Original",
                 Color::Plasma => "Plasma",
                 Color::Poolside => "Poolside",
                 Color::Desktop => "Use desktop wallpaper",

@@ -3,13 +3,13 @@
 
 use flux::{settings::*, *};
 use glow::HasContext;
-use raw_window_handle::RawWindowHandle;
 use std::fs::File;
 use std::rc::Rc;
 use takeable::Takeable;
 
 #[cfg(windows)]
 use glutin::platform::windows::WindowBuilderExtWindows;
+use raw_window_handle::RawWindowHandle;
 
 mod cli;
 mod settings_window;
@@ -74,51 +74,19 @@ fn main() {
 }
 
 fn run_flux(mode: Mode) -> Result<(), String> {
-    let settings = Rc::new(Settings {
-        mode: settings::Mode::Normal,
-        fluid_size: 128,
-        fluid_frame_rate: 60.0,
-        fluid_timestep: 1.0 / 60.0,
-        viscosity: 5.0,
-        velocity_dissipation: 0.0,
-        clear_pressure: settings::ClearPressure::KeepPressure,
-        diffusion_iterations: 3,
-        pressure_iterations: 19,
-        color_scheme: ColorScheme::Peacock,
-        line_length: 550.0,
-        line_width: 10.0,
-        line_begin_offset: 0.4,
-        line_variance: 0.45,
-        grid_spacing: 15,
-        view_scale: 1.6,
-        noise_channels: vec![
-            Noise {
-                scale: 2.5,
-                multiplier: 1.0,
-                offset_increment: 0.0015,
-            },
-            Noise {
-                scale: 15.0,
-                multiplier: 0.7,
-                offset_increment: 0.0015 * 6.0,
-            },
-            Noise {
-                scale: 30.0,
-                multiplier: 0.5,
-                offset_increment: 0.0015 * 12.0,
-            },
-        ],
-    });
-
-    let event_loop = glutin::event_loop::EventLoop::new();
-
     if mode == Mode::Settings {
-        settings_window::run();
+        log::debug!("Running settings");
+        return settings_window::run().map_err(|err| err.to_string());
     }
 
+    let event_loop = glutin::event_loop::EventLoop::new();
     let mut window_mode = match mode {
         Mode::Preview(raw_window_handle) => {
-            new_preview_window(&event_loop, &raw_window_handle, &settings)?
+            #[cfg(not(windows))]
+            panic!("Preview window unsupported");
+
+            #[cfg(windows)]
+            new_preview_window(&event_loop, &raw_window_handle, &Default::default())?
         }
         Mode::Screensaver => {
             let monitors = event_loop.available_monitors().collect();
@@ -129,11 +97,11 @@ fn run_flux(mode: Mode) -> Result<(), String> {
 
             let instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, &settings, surface))
+                .map(|surface| new_instance(&event_loop, &Default::default(), surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
-        _ => panic!(),
+        _ => unreachable!()
     };
 
     let start = std::time::Instant::now();
@@ -206,6 +174,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
     });
 }
 
+#[cfg(windows)]
 fn new_preview_window(
     event_loop: &glutin::event_loop::EventLoop<()>,
     raw_window_handle: &RawWindowHandle,
@@ -315,7 +284,7 @@ fn new_instance(
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        settings,
+        &Default::default(),
     )
     .map_err(|err| err.to_string())?;
 
