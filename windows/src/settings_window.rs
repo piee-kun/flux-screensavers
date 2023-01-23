@@ -1,7 +1,9 @@
-use iced::widget::{column, container, pick_list };
+use crate::config::Config;
+
+use iced::widget::{column, container, pick_list};
 use iced::{Alignment, Element, Length, Sandbox};
 
-pub fn run() -> iced::Result {
+pub fn run(config: Config) -> iced::Result {
     Settings::run(iced::Settings {
         window: iced::window::Settings {
             size: (250, 250),
@@ -46,14 +48,11 @@ impl Sandbox for Settings {
         let pick_list = pick_list(&Color::ALL[..], Some(self.color), Message::SetColor)
             .placeholder("Choose a color theme");
 
-        let content = column![
-            "Colors",
-            pick_list,
-        ]
-        .width(Length::Fill)
-        .align_items(Alignment::Center)
-        .spacing(10)
-        .padding(10);
+        let content = column!["Colors", pick_list,]
+            .width(Length::Fill)
+            .align_items(Alignment::Center)
+            .spacing(10)
+            .padding(10);
 
         container(content)
             .width(Length::Fill)
@@ -74,7 +73,12 @@ enum Color {
 }
 
 impl Color {
-    const ALL: [Color; 4] = [Color::Original, Color::Plasma, Color::Poolside, Color::Desktop];
+    const ALL: [Color; 4] = [
+        Color::Original,
+        Color::Plasma,
+        Color::Poolside,
+        Color::Desktop,
+    ];
 }
 
 impl std::fmt::Display for Color {

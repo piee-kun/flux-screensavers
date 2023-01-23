@@ -1,20 +1,22 @@
 // Disable the console window that pops up when you launch the .exe
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
+mod config;
+mod settings_window;
+mod surface;
+
+use cli::Mode;
+use config::Config;
 use flux::{settings::*, *};
+
 use glow::HasContext;
-use std::fs::File;
-use std::rc::Rc;
+use std::{fs, path, process, rc::Rc};
 use takeable::Takeable;
 
 #[cfg(windows)]
 use glutin::platform::windows::WindowBuilderExtWindows;
 use raw_window_handle::RawWindowHandle;
-
-mod cli;
-mod settings_window;
-mod surface;
-use cli::Mode;
 
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
@@ -46,40 +48,66 @@ enum WindowMode {
 }
 
 fn main() {
-    use simplelog::*;
+    let project_dirs = directories::ProjectDirs::from("me", "sandydoo", "Flux");
+    let log_dir = project_dirs.as_ref().map(|dirs| dirs.data_local_dir());
+    let config_dir = project_dirs.as_ref().map(|dirs| dirs.preference_dir());
 
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        ),
-        WriteLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            // TODO: move to cache dir
-            File::create("flux_screensaver.log").unwrap(),
-        ),
-    ])
-    .expect("set up logging");
+    init_logging(log_dir);
 
-    match cli::read_flags().and_then(run_flux) {
-        Ok(_) => std::process::exit(0),
+    let config = Config::load(config_dir);
+
+    match cli::read_flags().and_then(|mode| {
+        if mode == Mode::Settings {
+            settings_window::run(config).map_err(|err| log::error!("{}", err));
+            return Ok(());
+        }
+
+        run_flux(mode, config)
+    }) {
+        Ok(_) => process::exit(0),
         Err(err) => {
             log::error!("{}", err);
-            std::process::exit(1)
+            process::exit(1)
         }
     };
 }
 
-fn run_flux(mode: Mode) -> Result<(), String> {
-    if mode == Mode::Settings {
-        log::debug!("Running settings");
-        return settings_window::run().map_err(|err| err.to_string());
+fn init_logging(optional_log_dir: Option<&path::Path>) {
+    use simplelog::*;
+
+    let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )];
+
+    if let Some(log_dir) = optional_log_dir {
+        let maybe_log_file = {
+            // fs::create_dir_all(log_dir)?;
+            let log_path = log_dir.join("flux_screensaver.log");
+            fs::OpenOptions::new()
+                .create_new(true)
+                .write(true)
+                .append(true)
+                .open(log_path)
+        };
+
+        if let Ok(log_file) = maybe_log_file {
+            loggers.push(WriteLogger::new(
+                LevelFilter::Warn,
+                Config::default(),
+                log_file,
+            ));
+        }
     }
 
+    let _ = CombinedLogger::init(loggers);
+}
+
+fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     let event_loop = glutin::event_loop::EventLoop::new();
+
     let mut window_mode = match mode {
         Mode::Preview(raw_window_handle) => {
             #[cfg(not(windows))]
@@ -101,7 +129,7 @@ fn run_flux(mode: Mode) -> Result<(), String> {
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
-        _ => unreachable!()
+        _ => unreachable!(),
     };
 
     let start = std::time::Instant::now();
