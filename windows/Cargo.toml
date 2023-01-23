@@ -36,6 +36,16 @@ winit = "0.27.5"
 
 [dependencies.iced]
 version = "0.7"
+features = [
+   # Use system fonts
+  "default_system_font",
+
+   # Use the OpenGL backend to reduce build size
+  "glow"
+]
+
+[dependencies.iced_glow]
+version = "0.6"
 
 [dependencies.flux]
 version = "4"
