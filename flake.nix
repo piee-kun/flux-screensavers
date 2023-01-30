@@ -29,17 +29,11 @@
         };
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
-
-        craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
-          rustc = rustToolchain;
-          cargo = rustToolchain;
-          rustfmt = rustToolchain;
-        });
       in
       pkgs.mkShell {
         packages = with pkgs; [ rustToolchain nixfmt ];
       };
-    } (flake-utils.lib.eachSystem [ "x86_64-linux" ] (system:
+    } (flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -48,6 +42,14 @@
         };
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
+          extensions = [
+            "rust-src"
+            "cargo"
+            "rustc"
+            "rls"
+            "rust-analysis"
+            "rustfmt"
+          ];
           targets = [ "x86_64-pc-windows-gnu" ];
         };
 
@@ -56,14 +58,22 @@
           cargo = rustToolchain;
           rustfmt = rustToolchain;
         });
-      in rec {
-        devShells.default = pkgs.pkgsBuildHost.mkShell {
-          inputsFrom = [ packages.flux-screensaver-windows ];
-          packages = with pkgs.pkgsBuildHost; [ rustToolchain nixfmt ];
+      in {
+        devShells = {
+          default = pkgs.pkgsBuildHost.mkShell {
+            # inputsFrom = [ packages.default ];
+            packages = with pkgs.pkgsBuildHost; [
+              rustToolchain
+              # nixfmt
+              pkg-config
+              fontconfig
+              cmake
+            ];
+          };
         };
 
-        packages.default =
-          craneLib.buildPackage rec {
+        packages = {
+          default = craneLib.buildPackage {
             src = ./windows;
             release = true;
 
@@ -82,6 +92,6 @@
               fi
             '';
           };
-        }
-      ));
+        };
+      }));
 }
