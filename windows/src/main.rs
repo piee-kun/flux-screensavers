@@ -206,24 +206,22 @@ fn new_preview_window(
     raw_window_handle: &RawWindowHandle,
     settings: &Rc<Settings>,
 ) -> Result<WindowMode, String> {
-    use std::mem;
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
 
-    let preview_window_handle = match raw_window_handle {
-        RawWindowHandle::Win32(handle) => handle.hwnd,
+    let preview_hwnd = match raw_window_handle {
+        RawWindowHandle::Win32(handle) => HWND(handle.hwnd as _),
         _ => return Err("This platform is not supported yet".to_string()),
     };
 
-    let hwnd: HWND = unsafe { mem::transmute(preview_window_handle) };
     let mut rect = RECT::default();
     unsafe {
-        GetClientRect(hwnd, &mut rect);
+        GetClientRect(preview_hwnd, &mut rect);
     }
 
     let window_builder = glutin::window::WindowBuilder::new()
         .with_title("Flux Preview")
-        .with_parent_window(preview_window_handle as isize)
+        .with_parent_window(preview_hwnd.0)
         .with_inner_size(glutin::dpi::Size::Physical(glutin::dpi::PhysicalSize::new(
             rect.right as u32,
             rect.bottom as u32,
