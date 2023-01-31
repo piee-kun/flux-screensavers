@@ -5,6 +5,7 @@ mod cli;
 mod config;
 mod settings_window;
 mod surface;
+mod wallpaper;
 
 use cli::Mode;
 use config::Config;
@@ -114,7 +115,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             panic!("Preview window unsupported");
 
             #[cfg(windows)]
-            new_preview_window(&event_loop, &raw_window_handle, &Default::default())?
+            new_preview_window(&event_loop, &raw_window_handle, config)?
         }
         Mode::Screensaver => {
             let monitors = event_loop.available_monitors().collect();
@@ -125,7 +126,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
 
             let instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, &Default::default(), surface))
+                .map(|surface| new_instance(&event_loop, config, surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
@@ -206,7 +207,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
 fn new_preview_window(
     event_loop: &glutin::event_loop::EventLoop<()>,
     raw_window_handle: &RawWindowHandle,
-    settings: &Rc<Settings>,
+    config: Config,
 ) -> Result<WindowMode, String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
@@ -255,13 +256,14 @@ fn new_preview_window(
     let physical_size = window.inner_size();
     let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
+    let settings = config.to_settings();
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        settings,
+        &Rc::new(settings),
     )
     .map_err(|err| err.to_string())?;
 
@@ -278,7 +280,7 @@ fn new_preview_window(
 
 fn new_instance(
     event_loop: &glutin::event_loop::EventLoop<()>,
-    settings: &Rc<Settings>,
+    config: Config,
     surface: &surface::Surface,
 ) -> Result<Instance<glutin::window::Window>, String> {
     let window_builder = glutin::window::WindowBuilder::new()
@@ -306,13 +308,14 @@ fn new_instance(
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
+    let settings = config.to_settings();
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        &Default::default(),
+        &Rc::new(settings),
     )
     .map_err(|err| err.to_string())?;
 

@@ -1,3 +1,5 @@
+use crate::wallpaper;
+
 use serde::{Deserialize, Serialize};
 use std::{fmt, fs, io, path};
 
@@ -57,6 +59,25 @@ impl Config {
             path: config_path.clone(),
             err,
         })
+    }
+
+    pub fn to_settings(&self) -> flux::settings::Settings {
+        use flux::settings;
+
+        let color_mode = match &self.flux.color_mode {
+            ColorMode::Preset(preset) => settings::ColorMode::Preset(preset.clone()),
+            ColorMode::DesktopImage => {
+                let wallpaper_path = wallpaper::get();
+                wallpaper_path.map_or(
+                    settings::ColorMode::default(),
+                    settings::ColorMode::ImageFile,
+                )
+            }
+        };
+        flux::settings::Settings {
+            color_mode,
+            ..Default::default()
+        }
     }
 }
 
