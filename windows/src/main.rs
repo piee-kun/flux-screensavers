@@ -12,6 +12,7 @@ use config::Config;
 use flux::{settings::*, *};
 
 use glow::HasContext;
+use glutin::monitor::MonitorHandle;
 use std::{fs, path, process, rc::Rc};
 use takeable::Takeable;
 
@@ -57,6 +58,8 @@ fn main() {
 
     let config = Config::load(config_dir);
 
+    print!("{:?}", config);
+
     match cli::read_flags().and_then(|mode| {
         if mode == Mode::Settings {
             settings_window::run(config).map_err(|err| log::error!("{}", err));
@@ -85,7 +88,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
 
     if let Some(log_dir) = optional_log_dir {
         let maybe_log_file = {
-            // fs::create_dir_all(log_dir)?;
+            fs::create_dir_all(log_dir).unwrap();
             let log_path = log_dir.join("flux_screensaver.log");
             fs::OpenOptions::new()
                 .create_new(true)
@@ -115,18 +118,18 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             panic!("Preview window unsupported");
 
             #[cfg(windows)]
-            new_preview_window(&event_loop, &raw_window_handle, config)?
+            new_preview_window(&event_loop, &raw_window_handle, &config)?
         }
         Mode::Screensaver => {
-            let monitors = event_loop.available_monitors().collect();
+            let monitors: Vec<MonitorHandle> = event_loop.available_monitors().collect();
             log::debug!("Available monitors: {:?}", monitors);
 
-            let surfaces = surface::combine_monitors(monitors);
+            let surfaces = surface::combine_monitors(monitors.clone());
             log::debug!("Creating windows: {:?}", surfaces);
 
             let instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, config, surface))
+                .map(|surface| new_instance(&event_loop, &config, &monitors, surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
@@ -207,7 +210,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
 fn new_preview_window(
     event_loop: &glutin::event_loop::EventLoop<()>,
     raw_window_handle: &RawWindowHandle,
-    config: Config,
+    config: &Config,
 ) -> Result<WindowMode, String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
@@ -256,7 +259,7 @@ fn new_preview_window(
     let physical_size = window.inner_size();
     let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
-    let settings = config.to_settings();
+    let settings = config.to_settings(None);
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
@@ -280,7 +283,8 @@ fn new_preview_window(
 
 fn new_instance(
     event_loop: &glutin::event_loop::EventLoop<()>,
-    config: Config,
+    config: &Config,
+    monitors: &[MonitorHandle],
     surface: &surface::Surface,
 ) -> Result<Instance<glutin::window::Window>, String> {
     let window_builder = glutin::window::WindowBuilder::new()
@@ -308,7 +312,7 @@ fn new_instance(
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
-    let settings = config.to_settings();
+    let settings = config.to_settings(Some(&monitors[0]));
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,

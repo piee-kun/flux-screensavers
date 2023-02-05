@@ -1,5 +1,6 @@
 use crate::wallpaper;
 
+use glutin::monitor::MonitorHandle;
 use serde::{Deserialize, Serialize};
 use std::{fmt, fs, io, path};
 
@@ -14,7 +15,7 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             // Latest version of the config
-            version: semver::Version::parse("0.1").unwrap(),
+            version: semver::Version::parse("0.1.0").unwrap(),
             log_level: log::Level::Warn,
             flux: Default::default(),
         }
@@ -61,17 +62,22 @@ impl Config {
         })
     }
 
-    pub fn to_settings(&self) -> flux::settings::Settings {
+    pub fn to_settings(&self, monitor: Option<&MonitorHandle>) -> flux::settings::Settings {
         use flux::settings;
 
         let color_mode = match &self.flux.color_mode {
             ColorMode::Preset(preset) => settings::ColorMode::Preset(preset.clone()),
             ColorMode::DesktopImage => {
-                let wallpaper_path = wallpaper::get();
-                wallpaper_path.map_or(
-                    settings::ColorMode::default(),
-                    settings::ColorMode::ImageFile,
-                )
+                if let Some(handle) = monitor {
+                    let wallpaper_path = wallpaper::get(handle);
+                    log::debug!("{:?}", wallpaper_path);
+                    wallpaper_path.map_or(
+                        settings::ColorMode::default(),
+                        settings::ColorMode::ImageFile,
+                    )
+                } else {
+                    settings::ColorMode::default()
+                }
             }
         };
         flux::settings::Settings {
