@@ -38,6 +38,14 @@ where
         self.flux.animate(timestamp);
         self.context.swap_buffers().expect("swap OpenGL buffers");
     }
+
+    pub fn render(&mut self) {
+        let context = self.context.take();
+        self.context =
+            unsafe { Takeable::new(context.make_current().expect("make OpenGL context current")) };
+        self.flux.render();
+        self.context.swap_buffers().expect("swap OpenGL buffers");
+    }
 }
 
 enum WindowMode {
@@ -138,6 +146,26 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
         _ => unreachable!(),
     };
 
+    // Render a black screen to both buffers and unhide all windows
+    match window_mode {
+        WindowMode::AllDisplays(ref mut instances) => {
+            for instance in instances.iter_mut() {
+                instance.render();
+                instance.render();
+                instance.context.window().set_visible(true);
+            }
+        }
+        WindowMode::PreviewWindow {
+            ref mut instance,
+            ref window,
+        } => {
+            instance.render();
+            instance.render();
+            // TODO: does it need to be visible?
+            window.set_visible(true);
+        }
+    }
+
     let start = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
         use glutin::event::{DeviceEvent, Event, WindowEvent};
@@ -234,7 +262,8 @@ fn new_preview_window(
             rect.right as u32,
             rect.bottom as u32,
         )))
-        .with_decorations(false);
+        .with_decorations(false)
+        .with_visible(false);
 
     let window = window_builder.build(event_loop).unwrap();
 
@@ -297,7 +326,9 @@ fn new_instance(
         .with_inner_size(surface.size)
         .with_position(surface.position)
         .with_maximized(true)
-        .with_decorations(false);
+        .with_decorations(false)
+        // Hide the window until we've initialized Flux
+        .with_visible(false);
     let context = glutin::ContextBuilder::new()
         .with_vsync(true)
         .with_gl_profile(glutin::GlProfile::Core)
