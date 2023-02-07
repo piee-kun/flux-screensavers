@@ -2,6 +2,7 @@ use crate::config::{ColorMode, Config};
 
 use iced::executor;
 use iced::widget::{button, column, container, pick_list, text};
+use iced::window;
 use iced::{Alignment, Application, Command, Element, Length, Theme};
 
 pub fn run(config: Config) -> iced::Result {
@@ -46,7 +47,7 @@ impl Application for Config {
 
             Message::Save => {
                 self.save().unwrap_or_else(|err| log::error!("{}", err));
-                Command::none()
+                window::close()
             }
         }
     }
