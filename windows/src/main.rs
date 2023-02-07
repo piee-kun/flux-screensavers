@@ -211,7 +211,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested { .. }
                     | WindowEvent::KeyboardInput { .. }
-                    | WindowEvent::MouseInput { .. } => {}
+                    | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
 
