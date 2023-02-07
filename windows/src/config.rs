@@ -62,23 +62,15 @@ impl Config {
         })
     }
 
-    pub fn to_settings(&self, monitor: Option<&MonitorHandle>) -> flux::settings::Settings {
+    pub fn to_settings(&self, wallpaper: Option<path::PathBuf>) -> flux::settings::Settings {
         use flux::settings;
 
         let color_mode = match &self.flux.color_mode {
             ColorMode::Preset(preset) => settings::ColorMode::Preset(preset.clone()),
-            ColorMode::DesktopImage => {
-                if let Some(handle) = monitor {
-                    let wallpaper_path = wallpaper::get(handle);
-                    log::debug!("{:?}", wallpaper_path);
-                    wallpaper_path.map_or(
-                        settings::ColorMode::default(),
-                        settings::ColorMode::ImageFile,
-                    )
-                } else {
-                    settings::ColorMode::default()
-                }
-            }
+            ColorMode::DesktopImage => wallpaper.map_or(
+                settings::ColorMode::default(),
+                settings::ColorMode::ImageFile,
+            ),
         };
         flux::settings::Settings {
             color_mode,

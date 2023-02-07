@@ -10,19 +10,11 @@ pub fn get(monitor: &MonitorHandle) -> Result<PathBuf> {
 
         let desktop: IDesktopWallpaper = CoCreateInstance(&DesktopWallpaper, None, CLSCTX_ALL)?;
 
-        log::debug!(
-            "Getting wallpaper {:?} {} {}",
-            monitor.name(),
-            monitor.hmonitor(),
-            monitor.native_id()
-        );
-        let monitor_id = desktop.GetMonitorDevicePathAt(0)?;
-        log::debug!("{:?}", *monitor_id.0);
-        let wallpaper: PWSTR = desktop.GetWallpaper(PCWSTR(monitor.native_id().as_ptr()))?;
+        let wallpaper: PWSTR = desktop.GetWallpaper(&HSTRING::from(monitor.native_id()))?;
 
         // TODO; check that the path is valid (file exists)
 
-        CoUninitialize();
+        // CoUninitialize();
 
         let path = wallpaper.to_string().unwrap();
         Ok(PathBuf::from(path))

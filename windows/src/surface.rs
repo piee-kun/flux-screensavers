@@ -2,20 +2,23 @@ use glutin::{
     dpi::{PhysicalPosition, PhysicalSize},
     monitor,
 };
+use std::path;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Surface {
     pub position: PhysicalPosition<i32>,
     pub size: PhysicalSize<u32>,
     pub scale_factor: f64,
+    pub wallpaper: Option<path::PathBuf>,
 }
 
 impl Surface {
-    fn from_monitor(monitor: &monitor::MonitorHandle) -> Self {
+    fn from_monitor(monitor: &monitor::MonitorHandle, wallpaper: &Option<path::PathBuf>) -> Self {
         Self {
             position: monitor.position(),
             size: monitor.size(),
             scale_factor: monitor.scale_factor(),
+            wallpaper: wallpaper.clone(),
         }
     }
 
@@ -35,14 +38,16 @@ impl Surface {
     }
 }
 
-pub fn combine_monitors(monitors: Vec<monitor::MonitorHandle>) -> Vec<Surface> {
+pub fn combine_monitors(
+    monitors: &[(monitor::MonitorHandle, Option<path::PathBuf>)],
+) -> Vec<Surface> {
     use std::collections::HashMap;
 
     let mut grouped_by_size: HashMap<PhysicalSize<u32>, Surface> = HashMap::new();
     for monitor in monitors.iter() {
-        let surface = Surface::from_monitor(monitor);
+        let surface = Surface::from_monitor(&monitor.0, &monitor.1);
         grouped_by_size
-            .entry(monitor.size())
+            .entry(monitor.0.size())
             .and_modify(|existing_surface| existing_surface.merge(&surface))
             .or_insert(surface);
     }

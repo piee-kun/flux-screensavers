@@ -121,15 +121,18 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             new_preview_window(&event_loop, &raw_window_handle, &config)?
         }
         Mode::Screensaver => {
-            let monitors: Vec<MonitorHandle> = event_loop.available_monitors().collect();
+            let monitors = event_loop
+                .available_monitors()
+                .map(|monitor| (monitor.clone(), wallpaper::get(&monitor).ok()))
+                .collect::<Vec<(MonitorHandle, Option<std::path::PathBuf>)>>();
             log::debug!("Available monitors: {:?}", monitors);
 
-            let surfaces = surface::combine_monitors(monitors.clone());
+            let surfaces = surface::combine_monitors(&monitors);
             log::debug!("Creating windows: {:?}", surfaces);
 
             let instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, &config, &monitors, surface))
+                .map(|surface| new_instance(&event_loop, &config, surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
@@ -256,10 +259,14 @@ fn new_preview_window(
         unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s) as *const _) };
     log::debug!("{:?}", glow_context.version());
 
+    let wallpaper = window
+        .current_monitor()
+        .and_then(|monitor| wallpaper::get(&monitor).ok());
+
     let physical_size = window.inner_size();
     let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
-    let settings = config.to_settings(None);
+    let settings = config.to_settings(wallpaper);
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
@@ -284,7 +291,6 @@ fn new_preview_window(
 fn new_instance(
     event_loop: &glutin::event_loop::EventLoop<()>,
     config: &Config,
-    monitors: &[MonitorHandle],
     surface: &surface::Surface,
 ) -> Result<Instance<glutin::window::Window>, String> {
     let window_builder = glutin::window::WindowBuilder::new()
@@ -312,7 +318,7 @@ fn new_instance(
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
-    let settings = config.to_settings(Some(&monitors[0]));
+    let settings = config.to_settings(surface.wallpaper.clone());
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
