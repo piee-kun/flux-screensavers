@@ -1,10 +1,12 @@
-use crate::config::Config;
+use crate::config::{ColorMode, Config};
 
-use iced::widget::{column, container, pick_list};
-use iced::{Alignment, Element, Length, Sandbox};
+use iced::executor;
+use iced::widget::{button, column, container, pick_list, text};
+use iced::{Alignment, Application, Command, Element, Length, Theme};
 
 pub fn run(config: Config) -> iced::Result {
-    Settings::run(iced::Settings {
+    Config::run(iced::Settings {
+        flags: config,
         window: iced::window::Settings {
             size: (250, 250),
             resizable: false,
@@ -15,83 +17,61 @@ pub fn run(config: Config) -> iced::Result {
     })
 }
 
-#[derive(Default)]
-struct Settings {
-    color: Color,
-}
-
 #[derive(Debug, Clone, Copy)]
-enum Message {
-    SetColor(Color),
+pub enum Message {
+    SetColorMode(ColorMode),
+    Save,
 }
 
-impl Sandbox for Settings {
+impl Application for Config {
+    type Executor = executor::Default;
     type Message = Message;
+    type Theme = Theme;
+    type Flags = Config;
 
-    fn new() -> Self {
-        Self::default()
+    fn new(config: Config) -> (Self, Command<Message>) {
+        (config, Command::none())
     }
 
     fn title(&self) -> String {
         String::from("Flux Settings")
     }
 
-    fn update(&mut self, message: Message) {
+    fn update(&mut self, message: Message) -> Command<Message> {
         match message {
-            Message::SetColor(new_color) => {
-                self.color = new_color;
+            Message::SetColorMode(new_color) => {
+                self.flux.color_mode = new_color;
+                Command::none()
+            }
+
+            Message::Save => {
+                self.save().unwrap_or_else(|err| log::error!("{}", err));
+                Command::none()
             }
         }
     }
 
     fn view(&self) -> Element<Message> {
-        let pick_list = pick_list(&Color::ALL[..], Some(self.color), Message::SetColor)
-            .placeholder("Choose a color theme");
+        let pick_list = pick_list(
+            &ColorMode::ALL[..],
+            Some(self.flux.color_mode),
+            Message::SetColorMode,
+        )
+        .placeholder("Choose a color theme");
 
-        let content = column!["Colors", pick_list,]
-            .width(Length::Fill)
+        let save_button = button(text("Save")).on_press(Message::Save);
+
+        let content = column!["Colors", pick_list, save_button]
+            .height(Length::Fill)
             .align_items(Alignment::Center)
-            .spacing(10)
-            .padding(10);
+            .spacing(10);
 
         container(content)
             .width(Length::Fill)
             .height(Length::Fill)
             .center_x()
             .center_y()
+            .padding(10)
             .into()
-    }
-}
-
-#[derive(Debug, Clone, Default, Copy, PartialEq, Eq)]
-enum Color {
-    #[default]
-    Original,
-    Plasma,
-    Poolside,
-    Desktop,
-}
-
-impl Color {
-    const ALL: [Color; 4] = [
-        Color::Original,
-        Color::Plasma,
-        Color::Poolside,
-        Color::Desktop,
-    ];
-}
-
-impl std::fmt::Display for Color {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            match self {
-                Color::Original => "Original",
-                Color::Plasma => "Plasma",
-                Color::Poolside => "Poolside",
-                Color::Desktop => "Use desktop wallpaper",
-            }
-        )
     }
 }

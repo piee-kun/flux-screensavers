@@ -91,9 +91,8 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
             fs::create_dir_all(log_dir).unwrap();
             let log_path = log_dir.join("flux_screensaver.log");
             fs::OpenOptions::new()
-                .create_new(true)
-                .write(true)
                 .append(true)
+                .create(true)
                 .open(log_path)
         };
 
