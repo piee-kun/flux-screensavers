@@ -1,19 +1,24 @@
 // Disable the console window that pops up when you launch the .exe
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod cli;
+mod config;
+mod settings_window;
+mod surface;
+mod wallpaper;
+
+use cli::Mode;
+use config::Config;
 use flux::{settings::*, *};
+
 use glow::HasContext;
-use raw_window_handle::RawWindowHandle;
-use std::fs::File;
-use std::rc::Rc;
+use glutin::monitor::MonitorHandle;
+use std::{fs, path, process, rc::Rc};
 use takeable::Takeable;
 
 #[cfg(windows)]
 use glutin::platform::windows::WindowBuilderExtWindows;
-
-mod cli;
-mod surface;
-use cli::Mode;
+use raw_window_handle::RawWindowHandle;
 
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
@@ -45,90 +50,92 @@ enum WindowMode {
 }
 
 fn main() {
-    use simplelog::*;
+    let project_dirs = directories::ProjectDirs::from("me", "sandydoo", "Flux");
+    let log_dir = project_dirs.as_ref().map(|dirs| dirs.data_local_dir());
+    let config_dir = project_dirs.as_ref().map(|dirs| dirs.preference_dir());
 
-    CombinedLogger::init(vec![
-        TermLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            TerminalMode::Mixed,
-            ColorChoice::Auto,
-        ),
-        WriteLogger::new(
-            LevelFilter::Debug,
-            Config::default(),
-            // TODO: move to cache dir
-            File::create("flux_screensaver.log").unwrap(),
-        ),
-    ])
-    .expect("set up logging");
+    init_logging(log_dir);
 
-    match cli::read_flags().and_then(run_flux) {
-        Ok(_) => std::process::exit(0),
+    let config = Config::load(config_dir);
+
+    print!("{:?}", config);
+
+    match cli::read_flags().and_then(|mode| {
+        if mode == Mode::Settings {
+            settings_window::run(config).map_err(|err| log::error!("{}", err));
+            return Ok(());
+        }
+
+        run_flux(mode, config)
+    }) {
+        Ok(_) => process::exit(0),
         Err(err) => {
             log::error!("{}", err);
-            std::process::exit(1)
+            process::exit(1)
         }
     };
 }
 
-fn run_flux(mode: Mode) -> Result<(), String> {
-    let settings = Rc::new(Settings {
-        mode: settings::Mode::Normal,
-        fluid_size: 128,
-        fluid_frame_rate: 60.0,
-        fluid_timestep: 1.0 / 60.0,
-        viscosity: 5.0,
-        velocity_dissipation: 0.0,
-        clear_pressure: settings::ClearPressure::KeepPressure,
-        diffusion_iterations: 3,
-        pressure_iterations: 19,
-        color_scheme: ColorScheme::Peacock,
-        line_length: 550.0,
-        line_width: 10.0,
-        line_begin_offset: 0.4,
-        line_variance: 0.45,
-        grid_spacing: 15,
-        view_scale: 1.6,
-        noise_channels: vec![
-            Noise {
-                scale: 2.5,
-                multiplier: 1.0,
-                offset_increment: 0.0015,
-            },
-            Noise {
-                scale: 15.0,
-                multiplier: 0.7,
-                offset_increment: 0.0015 * 6.0,
-            },
-            Noise {
-                scale: 30.0,
-                multiplier: 0.5,
-                offset_increment: 0.0015 * 12.0,
-            },
-        ],
-    });
+fn init_logging(optional_log_dir: Option<&path::Path>) {
+    use simplelog::*;
 
+    let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )];
+
+    if let Some(log_dir) = optional_log_dir {
+        let maybe_log_file = {
+            fs::create_dir_all(log_dir).unwrap();
+            let log_path = log_dir.join("flux_screensaver.log");
+            fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(log_path)
+        };
+
+        if let Ok(log_file) = maybe_log_file {
+            loggers.push(WriteLogger::new(
+                LevelFilter::Warn,
+                Config::default(),
+                log_file,
+            ));
+        }
+    }
+
+    let _ = CombinedLogger::init(loggers);
+}
+
+fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     let event_loop = glutin::event_loop::EventLoop::new();
 
     let mut window_mode = match mode {
-        Mode::Settings => return Ok(()),
         Mode::Preview(raw_window_handle) => {
-            new_preview_window(&event_loop, &raw_window_handle, &settings)?
+            #[cfg(not(windows))]
+            panic!("Preview window unsupported");
+
+            #[cfg(windows)]
+            new_preview_window(&event_loop, &raw_window_handle, &config)?
         }
         Mode::Screensaver => {
-            let monitors = event_loop.available_monitors().collect();
+            let monitors = event_loop
+                .available_monitors()
+                .map(|monitor| (monitor.clone(), wallpaper::get(&monitor).ok()))
+                .collect::<Vec<(MonitorHandle, Option<std::path::PathBuf>)>>();
             log::debug!("Available monitors: {:?}", monitors);
 
-            let surfaces = surface::combine_monitors(monitors);
+            let surfaces = surface::combine_monitors(&monitors);
             log::debug!("Creating windows: {:?}", surfaces);
 
             let instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, &settings, surface))
+                .map(|surface| new_instance(&event_loop, &config, surface))
                 .collect::<Result<Vec<Instance<glutin::window::Window>>, String>>()?;
             WindowMode::AllDisplays(instances)
         }
+        _ => unreachable!(),
     };
 
     let start = std::time::Instant::now();
@@ -201,10 +208,11 @@ fn run_flux(mode: Mode) -> Result<(), String> {
     });
 }
 
+#[cfg(windows)]
 fn new_preview_window(
     event_loop: &glutin::event_loop::EventLoop<()>,
     raw_window_handle: &RawWindowHandle,
-    settings: &Rc<Settings>,
+    config: &Config,
 ) -> Result<WindowMode, String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
@@ -250,16 +258,21 @@ fn new_preview_window(
         unsafe { glow::Context::from_loader_function(|s| context.get_proc_address(s) as *const _) };
     log::debug!("{:?}", glow_context.version());
 
+    let wallpaper = window
+        .current_monitor()
+        .and_then(|monitor| wallpaper::get(&monitor).ok());
+
     let physical_size = window.inner_size();
     let scale_factor = window.scale_factor();
     let logical_size = physical_size.to_logical(scale_factor);
+    let settings = config.to_settings(wallpaper);
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        settings,
+        &Rc::new(settings),
     )
     .map_err(|err| err.to_string())?;
 
@@ -276,7 +289,7 @@ fn new_preview_window(
 
 fn new_instance(
     event_loop: &glutin::event_loop::EventLoop<()>,
-    settings: &Rc<Settings>,
+    config: &Config,
     surface: &surface::Surface,
 ) -> Result<Instance<glutin::window::Window>, String> {
     let window_builder = glutin::window::WindowBuilder::new()
@@ -304,13 +317,14 @@ fn new_instance(
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
+    let settings = config.to_settings(surface.wallpaper.clone());
     let flux = Flux::new(
         &Rc::new(glow_context),
         logical_size.width,
         logical_size.height,
         physical_size.width,
         physical_size.height,
-        settings,
+        &Rc::new(settings),
     )
     .map_err(|err| err.to_string())?;
 

@@ -2,7 +2,7 @@
   description = "Flux Screensavers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-22.11";
     flake-utils.url = "github:numtide/flake-utils";
     crane = {
       url = "github:ipetkov/crane";
@@ -21,7 +21,19 @@
   };
 
   outputs = { self, nixpkgs, flake-utils, crane, rust-overlay }:
-    flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
+    nixpkgs.lib.recursiveUpdate {
+      devShells.aarch64-darwin.default = let
+        pkgs = import nixpkgs {
+          system = "aarch64-darwin";
+          overlays = [ (import rust-overlay) ];
+        };
+
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
+      in
+      pkgs.mkShell {
+        packages = with pkgs; [ rustToolchain nixfmt ];
+      };
+    } (flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
         pkgs = import nixpkgs {
           inherit system;
@@ -30,6 +42,14 @@
         };
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
+          extensions = [
+            "rust-src"
+            "cargo"
+            "rustc"
+            "rls"
+            "rust-analysis"
+            "rustfmt"
+          ];
           targets = [ "x86_64-pc-windows-gnu" ];
         };
 
@@ -38,16 +58,22 @@
           cargo = rustToolchain;
           rustfmt = rustToolchain;
         });
-      in rec {
+      in {
         devShells = {
           default = pkgs.pkgsBuildHost.mkShell {
-            inputsFrom = [ packages.flux-screensaver-windows ];
-            packages = with pkgs.pkgsBuildHost; [ rustToolchain nixfmt ];
+            # inputsFrom = [ packages.default ];
+            packages = with pkgs.pkgsBuildHost; [
+              rustToolchain
+              # nixfmt
+              pkg-config
+              fontconfig
+              cmake
+            ];
           };
         };
 
         packages = {
-          default = craneLib.buildPackage rec {
+          default = craneLib.buildPackage {
             src = ./windows;
             release = true;
 
@@ -67,5 +93,5 @@
             '';
           };
         };
-      });
+      }));
 }
