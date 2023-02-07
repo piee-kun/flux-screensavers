@@ -26,6 +26,7 @@ directories = "4"
 glow = "0.11.2"
 glutin = "0.29.1"
 log = { version = "0.4", features = ["serde"] }
+log-panics = { version = "2", features = ["with-backtrace"]}
 raw-window-handle = "0.4"
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }

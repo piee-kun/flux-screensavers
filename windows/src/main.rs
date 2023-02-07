@@ -66,8 +66,6 @@ fn main() {
 
     let config = Config::load(config_dir);
 
-    print!("{:?}", config);
-
     match cli::read_flags().and_then(|mode| {
         if mode == Mode::Settings {
             settings_window::run(config).map_err(|err| log::error!("{}", err));
@@ -114,6 +112,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
     }
 
     let _ = CombinedLogger::init(loggers);
+    log_panics::init();
 }
 
 fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
