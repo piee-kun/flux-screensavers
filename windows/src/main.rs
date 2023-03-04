@@ -315,6 +315,9 @@ fn new_instance(
         .with_inner_size(surface.size)
         .with_position(surface.position)
         .with_decorations(false)
+        .with_undecorated_shadow(false)
+        .with_skip_taskbar(true)
+        .with_window_level(glutin::window::WindowLevel::AlwaysOnTop)
         // Hide the window until we've initialized Flux
         .with_visible(false);
     let context = glutin::ContextBuilder::new()
