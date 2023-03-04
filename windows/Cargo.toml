@@ -18,22 +18,21 @@ LegalCopyright = "© 2022 Sander Melnikov"
 
 [profile.release]
 opt-level = 3
-lto = true
+lto = false
 strip = true
 
 [dependencies]
 directories = "4"
 glow = "0.11.2"
-glutin = "0.29.1"
+glutin = { version = "0.29.1", git = "https://github.com/sandydoo/glutin", branch = "bump-winit" }
 log = { version = "0.4", features = ["serde"] }
 log-panics = { version = "2", features = ["with-backtrace"]}
-raw-window-handle = "0.4"
+raw-window-handle = "0.5"
 semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 simplelog = "^0.12.0"
 takeable = "0.2.1"
-winit = "0.28.1"
 
 [dependencies.iced]
 version = "0.7"
