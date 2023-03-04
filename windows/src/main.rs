@@ -314,7 +314,6 @@ fn new_instance(
         .with_title("Flux")
         .with_inner_size(surface.size)
         .with_position(surface.position)
-        .with_maximized(true)
         .with_decorations(false)
         // Hide the window until we've initialized Flux
         .with_visible(false);
