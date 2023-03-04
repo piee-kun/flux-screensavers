@@ -38,14 +38,6 @@ where
         self.flux.animate(timestamp);
         self.context.swap_buffers().expect("swap OpenGL buffers");
     }
-
-    pub fn render(&mut self) {
-        let context = self.context.take();
-        self.context =
-            unsafe { Takeable::new(context.make_current().expect("make OpenGL context current")) };
-        self.flux.render();
-        self.context.swap_buffers().expect("swap OpenGL buffers");
-    }
 }
 
 enum WindowMode {
@@ -145,12 +137,10 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
         _ => unreachable!(),
     };
 
-    // Render a black screen to both buffers and unhide all windows
+    // Unhide windows after context setup
     match window_mode {
         WindowMode::AllDisplays(ref mut instances) => {
             for instance in instances.iter_mut() {
-                instance.render();
-                instance.render();
                 instance.context.window().set_visible(true);
             }
         }
@@ -158,8 +148,6 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             ref mut instance,
             ref window,
         } => {
-            instance.render();
-            instance.render();
             // TODO: does it need to be visible?
             window.set_visible(true);
         }
