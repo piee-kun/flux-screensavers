@@ -23,7 +23,7 @@ pub fn read_flags() -> Result<Mode, String> {
         // to close your settings window if the parent windows closes?
         //
         // No flags -> <right click + configure> sends no flags whatsoever.
-        Some("/c") => Ok(Mode::Settings),
+        Some("/c") | None => Ok(Mode::Settings),
         Some(s) if s.starts_with("/c:") => Ok(Mode::Settings),
 
         // Run screensaver
@@ -32,7 +32,7 @@ pub fn read_flags() -> Result<Mode, String> {
         //
         // /S -> <right click + test> sends an uppercase /S, which doesn’t
         // seem to be documented anywhere.
-        Some("/s") | None => Ok(Mode::Screensaver),
+        Some("/s") => Ok(Mode::Screensaver),
 
         // Run preview
         //
