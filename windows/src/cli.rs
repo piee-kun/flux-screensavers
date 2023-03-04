@@ -47,7 +47,7 @@ pub fn read_flags() -> Result<Mode, String> {
                 .parse::<usize>()
                 .map_err(|e| e.to_string())?;
 
-            let mut handle = raw_window_handle::Win32Handle::empty();
+            let mut handle = raw_window_handle::Win32WindowHandle::empty();
             handle.hwnd = handle_ptr as *mut c_void;
             Ok(Mode::Preview(RawWindowHandle::Win32(handle)))
         }

@@ -254,15 +254,17 @@ fn new_preview_window(
         GetClientRect(preview_hwnd, &mut rect);
     }
 
-    let window_builder = glutin::window::WindowBuilder::new()
-        .with_title("Flux Preview")
-        .with_parent_window(preview_hwnd.0)
-        .with_inner_size(glutin::dpi::Size::Physical(glutin::dpi::PhysicalSize::new(
-            rect.right as u32,
-            rect.bottom as u32,
-        )))
-        .with_decorations(false)
-        .with_visible(false);
+    let window_builder = unsafe {
+        glutin::window::WindowBuilder::new()
+            .with_title("Flux Preview")
+            .with_parent_window(Some(*raw_window_handle))
+            .with_inner_size(glutin::dpi::Size::Physical(glutin::dpi::PhysicalSize::new(
+                rect.right as u32,
+                rect.bottom as u32,
+            )))
+            .with_decorations(false)
+            .with_visible(false)
+    };
 
     let window = window_builder.build(event_loop).unwrap();
 
