@@ -155,7 +155,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
 
     let start = std::time::Instant::now();
     event_loop.run(move |event, _, control_flow| {
-        use glutin::event::{DeviceEvent, Event, WindowEvent};
+        use glutin::event::{DeviceEvent, ElementState, Event, KeyboardInput, WindowEvent};
         use glutin::event_loop::ControlFlow;
 
         *control_flow = ControlFlow::Poll;
@@ -198,7 +198,14 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
 
                 Event::WindowEvent { event, .. } => match event {
                     WindowEvent::CloseRequested { .. }
-                    | WindowEvent::KeyboardInput { .. }
+                    | WindowEvent::KeyboardInput {
+                        input:
+                            KeyboardInput {
+                                state: ElementState::Pressed,
+                                ..
+                            },
+                        ..
+                    }
                     | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
                     _ => (),
                 },
