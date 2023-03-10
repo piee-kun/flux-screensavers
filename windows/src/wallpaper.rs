@@ -1,7 +1,7 @@
-use glutin::monitor::MonitorHandle;
-use glutin::platform::windows::MonitorHandleExtWindows;
 use std::{path::PathBuf, ptr};
 use windows::{core::*, Win32::System::Com::*, Win32::UI::Shell::*};
+use winit::monitor::MonitorHandle;
+use winit::platform::windows::MonitorHandleExtWindows;
 
 pub fn get(monitor: &MonitorHandle) -> Result<PathBuf> {
     unsafe {

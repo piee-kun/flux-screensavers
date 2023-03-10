@@ -1,6 +1,9 @@
 use raw_window_handle::RawWindowHandle;
 use std::ffi::c_void;
 
+#[cfg(windows)]
+use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+
 #[derive(PartialEq)]
 pub enum Mode {
     Preview(RawWindowHandle),
@@ -49,6 +52,9 @@ pub fn read_flags() -> Result<Mode, String> {
 
             let mut handle = raw_window_handle::Win32WindowHandle::empty();
             handle.hwnd = handle_ptr as *mut c_void;
+            handle.hinstance =
+                unsafe { GetModuleHandleW(None).expect("current hinstance") }.0 as *mut _;
+
             Ok(Mode::Preview(RawWindowHandle::Win32(handle)))
         }
 

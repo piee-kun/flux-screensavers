@@ -1,8 +1,8 @@
-use glutin::{
+use std::path;
+use winit::{
     dpi::{PhysicalPosition, PhysicalSize},
     monitor,
 };
-use std::path;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Surface {

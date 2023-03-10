@@ -18,13 +18,12 @@ LegalCopyright = "© 2022 Sander Melnikov"
 
 [profile.release]
 opt-level = 3
-lto = false
+lto = true
 strip = true
 
 [dependencies]
 directories = "4"
 glow = "0.11.2"
-glutin = { version = "0.29.1", git = "https://github.com/sandydoo/glutin", branch = "bump-winit" }
 log = { version = "0.4", features = ["serde"] }
 log-panics = { version = "2", features = ["with-backtrace"]}
 raw-window-handle = "0.5"
@@ -32,10 +31,16 @@ semver = { version = "1", features = ["serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 simplelog = "^0.12.0"
-takeable = "0.2.1"
+winit = { version = "0.28.1", default-features = false }
+
+[dependencies.glutin]
+version = "0.30.6"
+default-features = false
+features = ["egl", "wgl"]
 
 [dependencies.iced]
 version = "0.7"
+default-features = false
 features = [
    # Use system fonts
   "default_system_font",
@@ -43,9 +48,6 @@ features = [
    # Use the OpenGL backend to reduce build size
   "glow"
 ]
-
-[dependencies.iced_glow]
-version = "0.6"
 
 [dependencies.flux]
 version = "4"
@@ -57,6 +59,7 @@ version =  "0.44.0"
 features = [
   "Win32_Foundation",
   "Win32_System_Com",
+  "Win32_System_LibraryLoader",
   "Win32_UI_HiDpi",
   "Win32_UI_Shell",
   "Win32_UI_WindowsAndMessaging"

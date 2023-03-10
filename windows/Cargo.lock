@@ -799,9 +799,8 @@ dependencies = [
  "directories",
  "flux",
  "glow",
- "glutin 0.29.1 (git+https://github.com/sandydoo/glutin?branch=bump-winit)",
+ "glutin 0.30.6",
  "iced",
- "iced_glow",
  "log",
  "log-panics",
  "raw-window-handle 0.5.0",
@@ -809,8 +808,8 @@ dependencies = [
  "serde",
  "serde_json",
  "simplelog",
- "takeable",
  "windows",
+ "winit 0.28.2",
  "winres",
 ]
 
@@ -1107,10 +1106,10 @@ dependencies = [
  "cgl",
  "cocoa",
  "core-foundation",
- "glutin_egl_sys 0.1.6 (registry+https://github.com/rust-lang/crates.io-index)",
- "glutin_gles2_sys 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
- "glutin_glx_sys 0.1.8 (registry+https://github.com/rust-lang/crates.io-index)",
- "glutin_wgl_sys 0.1.5 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glutin_egl_sys 0.1.6",
+ "glutin_gles2_sys",
+ "glutin_glx_sys",
+ "glutin_wgl_sys 0.1.5",
  "libloading",
  "log",
  "objc",
@@ -1126,27 +1125,22 @@ dependencies = [
 
 [[package]]
 name = "glutin"
-version = "0.29.1"
-source = "git+https://github.com/sandydoo/glutin?branch=bump-winit#46422410818a4cd500271bf3e0c867f8c1a7b967"
+version = "0.30.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "68dc39a51f661324ea93bf87066d62ee6e83439c4260332695478186ec318cac"
 dependencies = [
+ "bitflags",
+ "cfg_aliases",
  "cgl",
- "cocoa",
  "core-foundation",
- "glutin_egl_sys 0.1.6 (git+https://github.com/sandydoo/glutin?branch=bump-winit)",
- "glutin_gles2_sys 0.1.5 (git+https://github.com/sandydoo/glutin?branch=bump-winit)",
- "glutin_glx_sys 0.1.8 (git+https://github.com/sandydoo/glutin?branch=bump-winit)",
- "glutin_wgl_sys 0.1.5 (git+https://github.com/sandydoo/glutin?branch=bump-winit)",
+ "dispatch",
+ "glutin_egl_sys 0.4.0",
+ "glutin_wgl_sys 0.4.0",
  "libloading",
- "log",
- "objc",
+ "objc2",
  "once_cell",
- "osmesa-sys",
- "parking_lot 0.12.1",
  "raw-window-handle 0.5.0",
- "wayland-client",
- "wayland-egl",
- "winapi",
- "winit 0.28.2",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -1161,11 +1155,12 @@ dependencies = [
 
 [[package]]
 name = "glutin_egl_sys"
-version = "0.1.6"
-source = "git+https://github.com/sandydoo/glutin?branch=bump-winit#46422410818a4cd500271bf3e0c867f8c1a7b967"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e5aaf0abb5c4148685b33101ae326a207946b4d3764d6cdc79f8316cdaa8367d"
 dependencies = [
  "gl_generator",
- "winapi",
+ "windows-sys 0.45.0",
 ]
 
 [[package]]
@@ -1173,15 +1168,6 @@ name = "glutin_gles2_sys"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e8094e708b730a7c8a1954f4f8a31880af00eb8a1c5b5bf85d28a0a3c6d69103"
-dependencies = [
- "gl_generator",
- "objc",
-]
-
-[[package]]
-name = "glutin_gles2_sys"
-version = "0.1.5"
-source = "git+https://github.com/sandydoo/glutin?branch=bump-winit#46422410818a4cd500271bf3e0c867f8c1a7b967"
 dependencies = [
  "gl_generator",
  "objc",
@@ -1198,15 +1184,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "glutin_glx_sys"
-version = "0.1.8"
-source = "git+https://github.com/sandydoo/glutin?branch=bump-winit#46422410818a4cd500271bf3e0c867f8c1a7b967"
-dependencies = [
- "gl_generator",
- "x11-dl",
-]
-
-[[package]]
 name = "glutin_wgl_sys"
 version = "0.1.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1217,8 +1194,9 @@ dependencies = [
 
 [[package]]
 name = "glutin_wgl_sys"
-version = "0.1.5"
-source = "git+https://github.com/sandydoo/glutin?branch=bump-winit#46422410818a4cd500271bf3e0c867f8c1a7b967"
+version = "0.4.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ef89398e90033fc6bc65e9bd42fd29bbbfd483bda5b56dc5562f455550618165"
 dependencies = [
  "gl_generator",
 ]
@@ -1407,7 +1385,7 @@ version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ccd8dd58586541b300b280b6fe8605add7a90283dfb8e622adc96cc545f5fa61"
 dependencies = [
- "glutin 0.29.1 (registry+https://github.com/rust-lang/crates.io-index)",
+ "glutin 0.29.1",
  "iced_graphics",
  "iced_native",
  "iced_winit",
@@ -2628,20 +2606,7 @@ dependencies = [
  "crossfont",
  "log",
  "smithay-client-toolkit",
- "tiny-skia 0.7.0",
-]
-
-[[package]]
-name = "sctk-adwaita"
-version = "0.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cc56402866c717f54e48b122eb93c69f709bc5a6359c403598992fd92f017931"
-dependencies = [
- "ab_glyph",
- "log",
- "memmap2",
- "smithay-client-toolkit",
- "tiny-skia 0.8.3",
+ "tiny-skia",
 ]
 
 [[package]]
@@ -2867,12 +2832,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9e08d8363704e6c71fc928674353e6b7c23dcea9d82d7012c8faf2a3a025f8d0"
 
 [[package]]
-name = "strict-num"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9df65f20698aeed245efdde3628a6b559ea1239bbb871af1b6e3b58c413b2bd1"
-
-[[package]]
 name = "strsim"
 version = "0.10.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2894,12 +2853,6 @@ dependencies = [
  "quote",
  "unicode-ident",
 ]
-
-[[package]]
-name = "takeable"
-version = "0.2.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7efe11d01772262041364ebf855e0c6c9e2bd0dd4f059083e540a5f1cda69477"
 
 [[package]]
 name = "termcolor"
@@ -2991,21 +2944,7 @@ dependencies = [
  "cfg-if",
  "png",
  "safe_arch 0.5.2",
- "tiny-skia-path 0.7.0",
-]
-
-[[package]]
-name = "tiny-skia"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "bfef3412c6975196fdfac41ef232f910be2bb37b9dd3313a49a1a6bc815a5bdb"
-dependencies = [
- "arrayref",
- "arrayvec 0.7.2",
- "bytemuck",
- "cfg-if",
- "png",
- "tiny-skia-path 0.8.3",
+ "tiny-skia-path",
 ]
 
 [[package]]
@@ -3016,17 +2955,6 @@ checksum = "c114d32f0c2ee43d585367cb013dfaba967ab9f62b90d9af0d696e955e70fa6c"
 dependencies = [
  "arrayref",
  "bytemuck",
-]
-
-[[package]]
-name = "tiny-skia-path"
-version = "0.8.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a4b5edac058fc98f51c935daea4d805b695b38e2f151241cad125ade2a2ac20d"
-dependencies = [
- "arrayref",
- "bytemuck",
- "strict-num",
 ]
 
 [[package]]
@@ -3643,7 +3571,7 @@ dependencies = [
  "percent-encoding",
  "raw-window-handle 0.4.3",
  "raw-window-handle 0.5.0",
- "sctk-adwaita 0.4.3",
+ "sctk-adwaita",
  "smithay-client-toolkit",
  "wasm-bindgen",
  "wayland-client",
@@ -3668,24 +3596,16 @@ dependencies = [
  "instant",
  "libc",
  "log",
- "mio",
  "ndk",
  "objc2",
  "once_cell",
  "orbclient",
- "percent-encoding",
  "raw-window-handle 0.5.0",
  "redox_syscall 0.3.4",
- "sctk-adwaita 0.5.3",
- "smithay-client-toolkit",
  "wasm-bindgen",
- "wayland-client",
- "wayland-commons",
- "wayland-protocols",
  "wayland-scanner",
  "web-sys",
  "windows-sys 0.45.0",
- "x11-dl",
 ]
 
 [[package]]
