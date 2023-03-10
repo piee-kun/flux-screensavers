@@ -151,14 +151,8 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     };
 
     // Unhide windows after context setup
-    match window_mode {
-        WindowMode::AllDisplays(ref mut instances) => {
-            for instance in instances.iter_mut() {
-                instance.window.set_visible(true);
-            }
-        }
-        WindowMode::PreviewWindow { ref mut instance } => {
-            // TODO: does it need to be visible?
+    if let WindowMode::AllDisplays(ref mut instances) = window_mode {
+        for instance in instances.iter_mut() {
             instance.window.set_visible(true);
         }
     }
