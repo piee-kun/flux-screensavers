@@ -11,17 +11,17 @@ use cli::Mode;
 use config::Config;
 use flux::Flux;
 
+use std::collections::HashMap;
 use std::ffi::CString;
 use std::num::NonZeroU32;
-
-use glow as GL;
-use glow::HasContext;
 use std::{fs, path, process, rc::Rc};
+
+use glow::HasContext;
 use winit::monitor::MonitorHandle;
 
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawWindowHandle};
-use winit::window::Window;
 use winit::window::WindowBuilder;
+use winit::window::{Window, WindowId};
 
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
@@ -53,11 +53,6 @@ impl Instance {
             .swap_buffers(&self.gl_context)
             .expect("swap OpenGL buffers");
     }
-}
-
-enum WindowMode {
-    AllDisplays(Vec<Instance>),
-    PreviewWindow { instance: Box<Instance> },
 }
 
 fn main() {
@@ -123,14 +118,20 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
 fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     let event_loop = winit::event_loop::EventLoop::new();
 
-    let mut window_mode = match mode {
+    match mode {
         Mode::Preview(raw_window_handle) => {
             #[cfg(not(windows))]
             panic!("Preview window unsupported");
 
-            #[cfg(windows)]
-            new_preview_window(&event_loop, raw_window_handle, &config)?
+            let mut instance = new_preview_window(&event_loop, raw_window_handle, &config)?;
+
+            let start = std::time::Instant::now();
+
+            event_loop.run(move |event, window_target, control_flow| {
+                run_preview_loop(event, window_target, control_flow, &mut instance, start)
+            });
         }
+
         Mode::Screensaver => {
             let monitors = event_loop
                 .available_monitors()
@@ -141,97 +142,113 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             let surfaces = surface::combine_monitors(&monitors);
             log::debug!("Creating windows: {:?}", surfaces);
 
-            let instances = surfaces
+            let mut instances = surfaces
                 .iter()
-                .map(|surface| new_instance(&event_loop, &config, surface))
-                .collect::<Result<Vec<Instance>, String>>()?;
-            WindowMode::AllDisplays(instances)
+                .map(|surface| {
+                    new_instance(&event_loop, &config, surface)
+                        .map(|instance| (instance.window.id(), instance))
+                })
+                .collect::<Result<HashMap<WindowId, Instance>, String>>()?;
+
+            let start = std::time::Instant::now();
+
+            // Unhide windows after context setup
+            for instance in instances.values() {
+                instance.window.set_visible(true);
+            }
+
+            event_loop.run(move |event, window_target, control_flow| {
+                run_main_loop(event, window_target, control_flow, &mut instances, start)
+            });
         }
+
         _ => unreachable!(),
     };
+}
 
-    // Unhide windows after context setup
-    if let WindowMode::AllDisplays(ref mut instances) = window_mode {
-        for instance in instances.iter_mut() {
-            instance.window.set_visible(true);
+fn run_preview_loop(
+    event: winit::event::Event<()>,
+    _window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    control_flow: &mut winit::event_loop::ControlFlow,
+    instance: &mut Instance,
+    start: std::time::Instant,
+) {
+    use winit::event::{Event, WindowEvent};
+    use winit::event_loop::ControlFlow;
+
+    *control_flow = ControlFlow::Poll;
+
+    match event {
+        Event::MainEventsCleared => {
+            let timestamp = start.elapsed().as_secs_f64() * 1000.0;
+            instance.draw(timestamp);
         }
+
+        Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
+
+        Event::WindowEvent { event, .. } => {
+            if event == WindowEvent::CloseRequested {
+                *control_flow = ControlFlow::Exit
+            }
+        }
+
+        _ => (),
     }
+}
 
-    let start = std::time::Instant::now();
-    event_loop.run(move |event, _, control_flow| {
-        use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, WindowEvent};
-        use winit::event_loop::ControlFlow;
+fn run_main_loop(
+    event: winit::event::Event<()>,
+    _window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    control_flow: &mut winit::event_loop::ControlFlow,
+    instances: &mut HashMap<WindowId, Instance>,
+    start: std::time::Instant,
+) {
+    use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, WindowEvent};
+    use winit::event_loop::ControlFlow;
 
-        *control_flow = ControlFlow::Poll;
+    *control_flow = ControlFlow::Poll;
 
-        match mode {
-            Mode::Preview(_) => match event {
-                Event::WindowEvent { event, .. } => {
-                    if event == WindowEvent::CloseRequested {
-                        *control_flow = ControlFlow::Exit
-                    }
-                }
-
-                Event::MainEventsCleared => {
-                    let timestamp = start.elapsed().as_secs_f64() * 1000.0;
-                    match window_mode {
-                        WindowMode::PreviewWindow {
-                            ref mut instance, ..
-                        } => instance.draw(timestamp),
-                        _ => panic!("Unexpected window mode"),
-                    }
-                }
-
-                Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
-
-                _ => (),
-            },
-
-            Mode::Screensaver => match event {
-                Event::MainEventsCleared => {
-                    let timestamp = start.elapsed().as_secs_f64() * 1000.0;
-                    match window_mode {
-                        WindowMode::AllDisplays(ref mut instances) => {
-                            for instance in instances.iter_mut() {
-                                instance.draw(timestamp);
-                            }
-                        }
-                        _ => panic!("Unexpected window mode"),
-                    }
-                }
-
-                Event::WindowEvent { event, .. } => match event {
-                    WindowEvent::CloseRequested { .. }
-                    | WindowEvent::KeyboardInput {
-                        input:
-                            KeyboardInput {
-                                state: ElementState::Pressed,
-                                ..
-                            },
-                        ..
-                    }
-                    | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
-                    _ => (),
-                },
-
-                Event::DeviceEvent {
-                    event:
-                        DeviceEvent::MouseMotion {
-                            delta: (xrel, yrel),
-                        },
-                    ..
-                } if f64::max(xrel.abs(), yrel.abs())
-                    > MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER =>
-                {
-                    *control_flow = ControlFlow::Exit
-                }
-
-                _ => {}
-            },
-
-            _ => (),
+    match event {
+        Event::MainEventsCleared => {
+            for (_, instance) in instances.iter_mut() {
+                instance.window.request_redraw();
+            }
         }
-    });
+
+        Event::RedrawRequested(window_id) => {
+            let instance = instances.get_mut(&window_id).expect("cannot find window");
+            let timestamp = start.elapsed().as_secs_f64() * 1000.0;
+            instance.draw(timestamp);
+        }
+
+        Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
+
+        Event::WindowEvent { event, .. } => match event {
+            WindowEvent::CloseRequested { .. }
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                is_synthetic: false,
+                ..
+            }
+            | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
+            _ => (),
+        },
+
+        Event::DeviceEvent {
+            event: DeviceEvent::MouseMotion {
+                delta: (xrel, yrel),
+            },
+            ..
+        } if f64::max(xrel.abs(), yrel.abs()) > MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER => {
+            *control_flow = ControlFlow::Exit
+        }
+
+        _ => (),
+    }
 }
 
 #[cfg(windows)]
@@ -239,7 +256,7 @@ fn new_preview_window(
     event_loop: &winit::event_loop::EventLoop<()>,
     raw_window_handle: RawWindowHandle,
     config: &Config,
-) -> Result<WindowMode, String> {
+) -> Result<Instance, String> {
     use windows::Win32::Foundation::{HWND, RECT};
     use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
     use winit::dpi::{PhysicalSize, Size};
@@ -294,15 +311,11 @@ fn new_preview_window(
     )
     .map_err(|err| err.to_string())?;
 
-    let instance = Instance {
+    Ok(Instance {
         flux,
         gl_context,
         gl_surface,
         window,
-    };
-
-    Ok(WindowMode::PreviewWindow {
-        instance: Box::new(instance),
     })
 }
 
@@ -324,14 +337,14 @@ fn new_instance(
         .build(event_loop)
         .unwrap();
 
+    window.set_cursor_visible(false);
+
     let (gl_context, gl_surface, glow_context) = new_gl_context(
         event_loop,
         window.raw_window_handle(),
         window.inner_size(),
         None,
     );
-
-    window.set_cursor_visible(false);
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
