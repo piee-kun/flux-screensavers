@@ -31,7 +31,7 @@
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
       in
       pkgs.mkShell {
-        packages = with pkgs; [ rustToolchain nixfmt ];
+        packages = with pkgs; [ rustToolchain alejandra ];
       };
     } (flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
       let
@@ -58,16 +58,17 @@
           cargo = rustToolchain;
           rustfmt = rustToolchain;
         });
-      in {
+      in rec {
         devShells = {
           default = pkgs.pkgsBuildHost.mkShell {
-            # inputsFrom = [ packages.default ];
+            inputsFrom = [ packages.default ];
+
             packages = with pkgs.pkgsBuildHost; [
               rustToolchain
-              # nixfmt
               pkg-config
               fontconfig
               cmake
+              alejandra
             ];
           };
         };
