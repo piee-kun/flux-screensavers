@@ -16,6 +16,7 @@ use std::ffi::CString;
 use std::num::NonZeroU32;
 use std::{fs, path, process, rc::Rc};
 
+use glow as GL;
 use glow::HasContext;
 use winit::monitor::MonitorHandle;
 
@@ -34,10 +35,14 @@ use winit::platform::windows::WindowBuilderExtWindows;
 
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
+// In milliseconds
+const FADE_TO_BLACK_DURATION: f64 = 300.0;
+
 struct Instance {
     flux: Flux,
     gl_context: PossiblyCurrentContext,
     gl_surface: Surface<WindowSurface>,
+    gl: Rc<glow::Context>,
     window: Window,
 }
 
@@ -48,6 +53,22 @@ impl Instance {
             .expect("make OpenGL context current");
 
         self.flux.animate(timestamp);
+
+        self.gl_surface
+            .swap_buffers(&self.gl_context)
+            .expect("swap OpenGL buffers");
+    }
+
+    pub fn fade_to_black(&mut self, timestamp: f64) {
+        self.gl_context
+            .make_current(&self.gl_surface)
+            .expect("make OpenGL context current");
+
+        let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+        unsafe {
+            self.gl.clear_color(0.0, 0.0, 0.0, progress);
+            self.gl.clear(GL::COLOR_BUFFER_BIT);
+        }
 
         self.gl_surface
             .swap_buffers(&self.gl_context)
@@ -218,7 +239,12 @@ fn run_main_loop(
         Event::RedrawRequested(window_id) => {
             let instance = instances.get_mut(&window_id).expect("cannot find window");
             let timestamp = start.elapsed().as_secs_f64() * 1000.0;
-            instance.draw(timestamp);
+
+            if timestamp < FADE_TO_BLACK_DURATION {
+                instance.fade_to_black(timestamp);
+            } else {
+                instance.draw(timestamp);
+            }
         }
 
         Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
@@ -302,7 +328,7 @@ fn new_preview_window(
     let logical_size = physical_size.to_logical(scale_factor);
     let settings = config.to_settings(wallpaper);
     let flux = Flux::new(
-        &Rc::new(glow_context),
+        &glow_context,
         logical_size.width,
         logical_size.height,
         physical_size.width,
@@ -315,6 +341,7 @@ fn new_preview_window(
         flux,
         gl_context,
         gl_surface,
+        gl: Rc::clone(&glow_context),
         window,
     })
 }
@@ -328,16 +355,18 @@ fn new_instance(
         .with_title("Flux")
         .with_inner_size(surface.size)
         .with_position(surface.position)
+        // Skips the default Windows window animation
+        .with_maximized(true)
+        // Hide the window until we've initialized Flux
+        .with_visible(false)
+        // Enable transparency to draw the fade in
+        .with_transparent(true)
         .with_decorations(false)
         .with_undecorated_shadow(false)
         .with_skip_taskbar(true)
         .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
-        // Hide the window until we've initialized Flux
-        .with_visible(false)
         .build(event_loop)
         .unwrap();
-
-    window.set_cursor_visible(false);
 
     let (gl_context, gl_surface, glow_context) = new_gl_context(
         event_loop,
@@ -350,7 +379,7 @@ fn new_instance(
     let logical_size = physical_size.to_logical(surface.scale_factor);
     let settings = config.to_settings(surface.wallpaper.clone());
     let flux = Flux::new(
-        &Rc::new(glow_context),
+        &glow_context,
         logical_size.width,
         logical_size.height,
         physical_size.width,
@@ -359,10 +388,13 @@ fn new_instance(
     )
     .map_err(|err| err.to_string())?;
 
+    window.set_cursor_visible(false);
+
     Ok(Instance {
         flux,
         gl_context,
         gl_surface,
+        gl: Rc::clone(&glow_context),
         window,
     })
 }
@@ -387,18 +419,43 @@ fn new_gl_context(
 ) -> (
     PossiblyCurrentContext,
     Surface<WindowSurface>,
-    glow::Context,
+    Rc<glow::Context>,
 ) {
     let template = ConfigTemplateBuilder::new()
+        .with_alpha_size(8)
+        .with_transparency(true)
+        // Double buffering doesn't work with transparency
+        .with_single_buffering(true)
         .compatible_with_native_window(raw_window_handle)
         .build();
 
     // Only WGL requires a window to create a full-fledged OpenGL context
     let attr_window = attr_window.unwrap_or(raw_window_handle);
-    let preference = DisplayApiPreference::Wgl(Some(attr_window));
+    let preference = DisplayApiPreference::WglThenEgl(Some(attr_window));
     let gl_display = unsafe { Display::new(event_loop.raw_display_handle(), preference).unwrap() };
 
-    let gl_config = unsafe { gl_display.find_configs(template).unwrap().next().unwrap() };
+    let gl_config = unsafe {
+        gl_display
+            .find_configs(template)
+            .unwrap()
+            .reduce(|accum, config| {
+                let transparency_check = config.supports_transparency().unwrap_or(false)
+                    & !accum.supports_transparency().unwrap_or(false);
+
+                if transparency_check || config.num_samples() > accum.num_samples() {
+                    config
+                } else {
+                    accum
+                }
+            })
+            .unwrap()
+    };
+
+    log::debug!(
+        "Picked a config with {} samples and {:?} transparency",
+        gl_config.num_samples(),
+        gl_config.supports_transparency()
+    );
 
     let context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
@@ -411,8 +468,8 @@ fn new_gl_context(
     };
 
     let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
-    let surface_attributes_builder = SurfaceAttributesBuilder::<WindowSurface>::new();
-    let attrs = surface_attributes_builder.build(raw_window_handle, width, height);
+    let attrs =
+        SurfaceAttributesBuilder::<WindowSurface>::new().build(raw_window_handle, width, height);
 
     let gl_surface = unsafe {
         gl_config
@@ -428,7 +485,7 @@ fn new_gl_context(
     if let Err(res) =
         gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
     {
-        eprintln!("Error setting vsync: {res:?}");
+        log::error!("Failed to set vsync: {res:?}");
     }
 
     let glow_context = unsafe {
@@ -438,7 +495,7 @@ fn new_gl_context(
     };
     log::debug!("{:?}", glow_context.version());
 
-    (gl_context, gl_surface, glow_context)
+    (gl_context, gl_surface, Rc::new(glow_context))
 }
 
 // Specifying DPI awareness in the app manifest does not apply when running in a
