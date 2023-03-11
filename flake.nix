@@ -20,79 +20,84 @@
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, crane, rust-overlay }:
+  outputs = {
+    self,
+    nixpkgs,
+    flake-utils,
+    crane,
+    rust-overlay,
+  }:
     nixpkgs.lib.recursiveUpdate {
       devShells.aarch64-darwin.default = let
         pkgs = import nixpkgs {
           system = "aarch64-darwin";
-          overlays = [ (import rust-overlay) ];
+          overlays = [(import rust-overlay)];
         };
 
         rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
       in
-      pkgs.mkShell {
-        packages = with pkgs; [ rustToolchain alejandra ];
+        pkgs.mkShell {
+          packages = with pkgs; [rustToolchain alejandra];
+        };
+    } (flake-utils.lib.eachSystem ["x86_64-linux" "aarch64-linux"] (system: let
+      pkgs = import nixpkgs {
+        inherit system;
+        crossSystem.config = "x86_64-w64-mingw32";
+        overlays = [(import rust-overlay)];
       };
-    } (flake-utils.lib.eachSystem [ "x86_64-linux" "aarch64-linux" ] (system:
-      let
-        pkgs = import nixpkgs {
-          inherit system;
-          crossSystem.config = "x86_64-w64-mingw32";
-          overlays = [ (import rust-overlay) ];
-        };
 
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
-          extensions = [
-            "rust-src"
-            "cargo"
-            "rustc"
-            "rls"
-            "rust-analyzer"
-            "rustfmt"
+      rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
+        extensions = [
+          "rust-src"
+          "cargo"
+          "rustc"
+          "rls"
+          "rust-analyzer"
+          "rustfmt"
+        ];
+        targets = ["x86_64-pc-windows-gnu"];
+      };
+
+      craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
+        rustc = rustToolchain;
+        cargo = rustToolchain;
+        rustfmt = rustToolchain;
+      });
+    in rec {
+      devShells = {
+        default = pkgs.pkgsBuildHost.mkShell {
+          inputsFrom = [packages.default];
+
+          packages = with pkgs.pkgsBuildHost; [
+            rustToolchain
+            pkg-config
+            fontconfig
+            cmake
+            alejandra
           ];
-          targets = [ "x86_64-pc-windows-gnu" ];
         };
+      };
 
-        craneLib = (crane.mkLib pkgs).overrideScope' (final: prev: {
-          rustc = rustToolchain;
-          cargo = rustToolchain;
-          rustfmt = rustToolchain;
-        });
-      in rec {
-        devShells = {
-          default = pkgs.pkgsBuildHost.mkShell {
-            inputsFrom = [ packages.default ];
+      packages = {
+        default = craneLib.buildPackage {
+          src = ./windows;
+          release = true;
 
-            packages = with pkgs.pkgsBuildHost; [
-              rustToolchain
-              pkg-config
-              fontconfig
-              cmake
-              alejandra
-            ];
-          };
+          buildInputs = [
+            pkgs.windows.pthreads
+            pkgs.windows.mingw_w64_pthreads
+          ];
+
+          CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
+          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
+
+          # Change the extension to .scr (Windows screensaver)
+          postInstall = ''
+            if [[ $out != *"deps"* ]]; then
+              mv $out/bin/Flux.exe "$out/bin/Flux.scr"
+            fi
+          '';
         };
-
-        packages = {
-          default = craneLib.buildPackage {
-            src = ./windows;
-            release = true;
-
-            buildInputs = [
-              pkgs.windows.pthreads
-              pkgs.windows.mingw_w64_pthreads
-            ];
-
-            CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
-            CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
-
-            # Change the extension to .scr (Windows screensaver)
-            postInstall = ''
-              if [[ $out != *"deps"* ]]; then
-                mv $out/bin/Flux.exe "$out/bin/Flux.scr"
-              fi
-            '';
-          };
-        };
-      }));
+      };
+    }));
 }
