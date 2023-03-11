@@ -41,18 +41,44 @@ impl Surface {
 pub fn combine_monitors(
     monitors: &[(monitor::MonitorHandle, Option<path::PathBuf>)],
 ) -> Vec<Surface> {
-    use std::collections::HashMap;
+    let surfaces = monitors
+        .iter()
+        .map(|(handle, wallpaper)| Surface::from_monitor(handle, wallpaper))
+        .collect();
 
-    let mut grouped_by_size: HashMap<PhysicalSize<u32>, Surface> = HashMap::new();
-    for monitor in monitors.iter() {
-        let surface = Surface::from_monitor(&monitor.0, &monitor.1);
-        grouped_by_size
-            .entry(monitor.0.size())
-            .and_modify(|existing_surface| existing_surface.merge(&surface))
-            .or_insert(surface);
+    SurfaceGroup::new().add(surfaces).combine()
+}
+
+use std::collections::HashMap;
+struct SurfaceGroup {
+    grouping: HashMap<PhysicalSize<u32>, Surface>,
+    surfaces: Vec<Surface>,
+}
+
+impl SurfaceGroup {
+    fn new() -> Self {
+        Self {
+            grouping: HashMap::new(),
+            surfaces: Vec::new(),
+        }
     }
 
-    grouped_by_size.into_values().collect::<Vec<Surface>>()
+    fn add(mut self, surfaces: Vec<Surface>) -> Self {
+        self.surfaces = surfaces;
+
+        self
+    }
+
+    fn combine(mut self) -> Vec<Surface> {
+        for surface in self.surfaces.iter() {
+            self.grouping
+                .entry(surface.size)
+                .and_modify(|existing_surface| existing_surface.merge(surface))
+                .or_insert_with(|| surface.clone());
+        }
+
+        self.grouping.into_values().collect::<Vec<Surface>>()
+    }
 }
 
 // #[cfg(test)]
