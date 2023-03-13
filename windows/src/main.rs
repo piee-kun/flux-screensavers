@@ -1,659 +1,540 @@
 // Disable the console window that pops up when you launch the .exe
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
-use core::ffi::c_void;
-use flux::{settings::*, *};
+mod cli;
+mod config;
+mod settings_window;
+mod surface;
+mod wallpaper;
+
+use cli::Mode;
+use config::Config;
+use flux::Flux;
+
+use std::collections::HashMap;
+use std::ffi::CString;
+use std::num::NonZeroU32;
+use std::{fs, path, process, rc::Rc};
+
+use glow as GL;
 use glow::HasContext;
-use raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
-use sdl2::event::Event;
-use sdl2::video::GLProfile;
-use std::rc::Rc;
+use winit::monitor::MonitorHandle;
+
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawWindowHandle};
+use winit::window::WindowBuilder;
+use winit::window::{Window, WindowId};
+
+use glutin::config::ConfigTemplateBuilder;
+use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
+use glutin::display::{Display, DisplayApiPreference, GetGlDisplay};
+use glutin::prelude::*;
+use glutin::surface::{Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 
 #[cfg(windows)]
-use winapi::shared::windef::HWND;
+use winit::platform::windows::WindowBuilderExtWindows;
 
-const BASE_DPI: f64 = 96.0;
-const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: i32 = 10;
+const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
-const SETTINGS_COMING_SOON_MESSAGE: &str = r#"
-    Coming soon!
-
-    You’ll be able to personalise the screensaver here and make it your own, but it’s not quite ready yet.
-    Follow me on Twitter @sandy_doo for updates!
-"#;
-
-#[derive(PartialEq)]
-enum Mode {
-    Screensaver,
-    Preview(RawWindowHandle),
-    Settings,
-}
+// In milliseconds
+const FADE_TO_BLACK_DURATION: f64 = 300.0;
 
 struct Instance {
     flux: Flux,
-    context: sdl2::video::GLContext,
-    window: sdl2::video::Window,
+    gl_context: PossiblyCurrentContext,
+    gl_surface: Surface<WindowSurface>,
+    gl: Rc<glow::Context>,
+    window: Window,
 }
 
 impl Instance {
     pub fn draw(&mut self, timestamp: f64) {
-        // Don’t use `gl_set_context_to_current`. It doesn’t use the
-        // corrent context!
-        self.window.gl_make_current(&self.context).unwrap();
-        self.flux.animate(timestamp);
-        self.window.gl_swap_window();
-    }
-}
+        self.gl_context
+            .make_current(&self.gl_surface)
+            .expect("make OpenGL context current");
 
-enum WindowMode<W: HasRawWindowHandle> {
-    AllDisplays(Vec<Instance>),
-    PreviewWindow {
-        instance: Instance,
-        #[allow(unused)]
-        event_window: W, // Keep this handle alive
-    },
+        self.flux.animate(timestamp);
+
+        self.gl_surface
+            .swap_buffers(&self.gl_context)
+            .expect("swap OpenGL buffers");
+    }
+
+    pub fn fade_to_black(&mut self, timestamp: f64) {
+        self.gl_context
+            .make_current(&self.gl_surface)
+            .expect("make OpenGL context current");
+
+        let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+        unsafe {
+            self.gl.clear_color(0.0, 0.0, 0.0, progress);
+            self.gl.clear(GL::COLOR_BUFFER_BIT);
+        }
+
+        self.gl_surface
+            .swap_buffers(&self.gl_context)
+            .expect("swap OpenGL buffers");
+    }
 }
 
 fn main() {
-    env_logger::init();
+    let project_dirs = directories::ProjectDirs::from("me", "sandydoo", "Flux");
+    let log_dir = project_dirs.as_ref().map(|dirs| dirs.data_local_dir());
+    let config_dir = project_dirs.as_ref().map(|dirs| dirs.preference_dir());
 
-    match read_flags().and_then(run_flux) {
-        Ok(_) => std::process::exit(0),
+    init_logging(log_dir);
+
+    let config = Config::load(config_dir);
+
+    match cli::read_flags().and_then(|mode| {
+        if mode == Mode::Settings {
+            settings_window::run(config)
+                .map_err(|err| log::error!("{}", err))
+                .unwrap();
+            return Ok(());
+        }
+
+        run_flux(mode, config)
+    }) {
+        Ok(_) => process::exit(0),
         Err(err) => {
             log::error!("{}", err);
-            std::process::exit(1)
+            process::exit(1)
         }
     };
 }
 
-fn run_flux(mode: Mode) -> Result<(), String> {
-    #[cfg(windows)]
-    set_dpi_awareness()?;
+fn init_logging(optional_log_dir: Option<&path::Path>) {
+    use simplelog::*;
 
-    // By default, SDL disables the screensaver and doesn’t allow the display to sleep. We want
-    // both of these things to happen in both screensaver and preview modes.
-    sdl2::hint::set("SDL_VIDEO_ALLOW_SCREENSAVER", "1");
+    let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
+        LevelFilter::Debug,
+        Config::default(),
+        TerminalMode::Mixed,
+        ColorChoice::Auto,
+    )];
 
-    let sdl_context = sdl2::init()?;
-    let video_subsystem = sdl_context.video()?;
+    if let Some(log_dir) = optional_log_dir {
+        let maybe_log_file = {
+            fs::create_dir_all(log_dir).unwrap();
+            let log_path = log_dir.join("flux_screensaver.log");
+            fs::OpenOptions::new()
+                .append(true)
+                .create(true)
+                .open(log_path)
+        };
 
-    if mode == Mode::Settings {
-        use sdl2::messagebox::{show_simple_message_box, MessageBoxFlag};
-        show_simple_message_box(
-            MessageBoxFlag::INFORMATION,
-            "Flux Settings",
-            SETTINGS_COMING_SOON_MESSAGE,
-            None,
-        )
-        .map_err(|msg| format!("Can’t open a message box: {}", msg))?;
-        return Ok(());
+        if let Ok(log_file) = maybe_log_file {
+            loggers.push(WriteLogger::new(
+                LevelFilter::Warn,
+                Config::default(),
+                log_file,
+            ));
+        }
     }
 
-    let gl_attr = video_subsystem.gl_attr();
-    gl_attr.set_context_profile(GLProfile::Core);
-    gl_attr.set_context_version(3, 3);
-    gl_attr.set_double_buffer(true);
+    let _ = CombinedLogger::init(loggers);
+    log_panics::init();
+}
 
-    // Forcibly disable antialiasing. We take care of that internally.
-    gl_attr.set_multisample_buffers(0);
-    gl_attr.set_multisample_samples(0);
+fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
+    let event_loop = winit::event_loop::EventLoop::new();
 
-    #[cfg(debug_assertions)]
-    gl_attr.set_context_flags().debug().set();
-
-    let settings = Rc::new(Settings {
-        mode: settings::Mode::Normal,
-        fluid_size: 128,
-        fluid_frame_rate: 60.0,
-        fluid_timestep: 1.0 / 60.0,
-        viscosity: 5.0,
-        velocity_dissipation: 0.0,
-        clear_pressure: settings::ClearPressure::KeepPressure,
-        diffusion_iterations: 3,
-        pressure_iterations: 19,
-        color_scheme: ColorScheme::Peacock,
-        line_length: 550.0,
-        line_width: 10.0,
-        line_begin_offset: 0.4,
-        line_variance: 0.45,
-        grid_spacing: 15,
-        view_scale: 1.6,
-        noise_channels: vec![
-            Noise {
-                scale: 2.5,
-                multiplier: 1.0,
-                offset_increment: 0.0015,
-            },
-            Noise {
-                scale: 15.0,
-                multiplier: 0.7,
-                offset_increment: 0.0015 * 6.0,
-            },
-            Noise {
-                scale: 30.0,
-                multiplier: 0.5,
-                offset_increment: 0.0015 * 12.0,
-            },
-        ],
-    });
-
-    let mut window_mode = match mode {
+    match mode {
         Mode::Preview(raw_window_handle) => {
-            let preview_window_handle = match raw_window_handle {
-                RawWindowHandle::Win32(handle) => handle.hwnd,
-                _ => return Err("This platform is not supported yet".to_string()),
-            };
+            #[cfg(not(windows))]
+            panic!("Preview window unsupported");
 
-            // Tell SDL that the window we’re about to adopt will be used with
-            // OpenGL.
-            sdl2::hint::set("SDL_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
-            let sdl_preview_window: *mut sdl2_sys::SDL_Window =
-                unsafe { sdl2_sys::SDL_CreateWindowFrom(preview_window_handle as *const c_void) };
+            let mut instance = new_preview_window(&event_loop, raw_window_handle, &config)?;
 
-            if sdl_preview_window.is_null() {
-                return Err(format!(
-                    "Can’t create the preview window with the handle {:?}",
-                    preview_window_handle
-                ));
-            }
+            let start = std::time::Instant::now();
 
-            let preview_window: sdl2::video::Window = unsafe {
-                sdl2::video::Window::from_ll(video_subsystem.clone(), sdl_preview_window)
-            };
-
-            // You need to create an actual window to listen to events. We’ll
-            // then link this to the preview window as a child to cleanup when
-            // the preview dialog is closed.
-            let event_window = video_subsystem
-                .window("Flux Preview", 0, 0)
-                .position(0, 0)
-                .borderless()
-                .hidden()
-                .build()
-                .map_err(|err| err.to_string())?;
-
-            match event_window.raw_window_handle() {
-                #[cfg(target_os = "windows")]
-                raw_window_handle::RawWindowHandle::Win32(event_window_handle) => {
-                    if unsafe {
-                        set_window_parent_win32(
-                            event_window_handle.hwnd as HWND,
-                            preview_window_handle as HWND,
-                        )
-                    } {
-                        log::debug!("Linked preview window");
-                    }
-                }
-                _ => (),
-            }
-
-            let surface = Surface::from_window(&video_subsystem, &preview_window)?;
-
-            let context = preview_window.gl_create_context()?;
-            let glow_context = unsafe {
-                glow::Context::from_loader_function(|s| {
-                    video_subsystem.gl_get_proc_address(s) as *const _
-                })
-            };
-            log::debug!("{:?}", glow_context.version());
-
-            preview_window.gl_make_current(&context)?;
-
-            let (logical_width, logical_height) = surface.logical_size();
-            let (physical_width, physical_height) = surface.physical_size();
-            let flux = Flux::new(
-                &Rc::new(glow_context),
-                logical_width,
-                logical_height,
-                physical_width,
-                physical_height,
-                &settings,
-            )
-            .map_err(|err| err.to_string())?;
-
-            let instance = Instance {
-                flux,
-                context,
-                window: preview_window,
-            };
-
-            WindowMode::PreviewWindow {
-                instance,
-                event_window,
-            }
+            event_loop.run(move |event, window_target, control_flow| {
+                run_preview_loop(event, window_target, control_flow, &mut instance, start)
+            });
         }
+
         Mode::Screensaver => {
-            let instances = Surface::detect_displays(&video_subsystem)?
-                .into_iter()
+            let monitors = event_loop
+                .available_monitors()
+                .map(|monitor| (monitor.clone(), wallpaper::get(&monitor).ok()))
+                .collect::<Vec<(MonitorHandle, Option<std::path::PathBuf>)>>();
+            log::debug!("Available monitors: {:?}", monitors);
+
+            let surfaces = surface::combine_monitors(&monitors);
+            log::debug!("Creating windows: {:?}", surfaces);
+
+            let mut instances = surfaces
+                .iter()
                 .map(|surface| {
-                    let (logical_width, logical_height) = surface.logical_size();
-                    let (physical_width, physical_height) = surface.physical_size();
+                    new_instance(&event_loop, &config, surface)
+                        .map(|instance| (instance.window.id(), instance))
+                })
+                .collect::<Result<HashMap<WindowId, Instance>, String>>()?;
 
-                    log::debug!(
-                        "Surface:\nPhysical size: {}x{}, Logical size: {}x{}, Position: {} {}, DPI: {}, Scaling: {}",
-                        physical_width,
-                        physical_height,
-                        logical_width,
-                        logical_height,
-                        surface.bounds.x(),
-                        surface.bounds.y(),
-                        surface.dpi,
-                        surface.scale_factor,
-                    );
+            let start = std::time::Instant::now();
 
-                    // Create the SDL window
-                    let window = video_subsystem
-                        .window("Flux", physical_width, physical_height)
-                        .position(surface.bounds.x(), surface.bounds.y())
-                        .input_grabbed()
-                        .borderless()
-                        .allow_highdpi()
-                        .opengl()
-                        .build()
-                        .map_err(|err| err.to_string())?;
+            // Unhide windows after context setup
+            for instance in instances.values() {
+                instance.window.set_visible(true);
+            }
 
-                    let context = window.gl_create_context()?;
-                    let glow_context = unsafe {
-                        glow::Context::from_loader_function(|s| {
-                            video_subsystem.gl_get_proc_address(s) as *const _
-                        })
-                    };
-                    log::debug!("{:?}", glow_context.version());
-
-                    window.gl_make_current(&context)?;
-                    let flux = Flux::new(
-                        &Rc::new(glow_context),
-                        logical_width,
-                        logical_height,
-                        physical_width,
-                        physical_height,
-                        &settings,
-                    )
-                    .map_err(|err| err.to_string())?;
-
-                    Ok(Instance {
-                        flux,
-                        context,
-                        window,
-                    })
-                }).collect::<Result<Vec<Instance>, String>>()?;
-
-            // Hide the cursor and report relative mouse movements.
-            sdl_context.mouse().set_relative_mouse_mode(true);
-
-            WindowMode::AllDisplays(instances)
+            event_loop.run(move |event, window_target, control_flow| {
+                run_main_loop(event, window_target, control_flow, &mut instances, start)
+            });
         }
+
         _ => unreachable!(),
     };
+}
 
-    // Try to enable vsync.
-    if let Err(err) = video_subsystem.gl_set_swap_interval(sdl2::video::SwapInterval::VSync) {
-        log::error!("Can’t enable vsync: {}", err);
-    }
+fn run_preview_loop(
+    event: winit::event::Event<()>,
+    _window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    control_flow: &mut winit::event_loop::ControlFlow,
+    instance: &mut Instance,
+    start: std::time::Instant,
+) {
+    use winit::event::{Event, WindowEvent};
+    use winit::event_loop::ControlFlow;
 
-    let mut event_pump = sdl_context.event_pump()?;
-    let start = std::time::Instant::now();
+    *control_flow = ControlFlow::Poll;
 
-    'main: loop {
-        for event in event_pump.poll_iter() {
-            match mode {
-                Mode::Preview(_) => match event {
-                    Event::Quit { .. }
-                    | Event::Window {
-                        win_event: sdl2::event::WindowEvent::Close,
-                        ..
-                    } => break 'main,
-                    _ => (),
-                },
-                Mode::Screensaver => match event {
-                    Event::Quit { .. }
-                    | Event::Window {
-                        win_event: sdl2::event::WindowEvent::Close,
-                        ..
-                    }
-                    | Event::KeyDown { .. }
-                    | Event::MouseButtonDown { .. } => break 'main,
-                    Event::MouseMotion { xrel, yrel, .. } => {
-                        if i32::max(xrel.abs(), yrel.abs())
-                            > MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER
-                        {
-                            break 'main;
-                        }
-                    }
-                    _ => {}
-                },
-                _ => (),
+    match event {
+        Event::MainEventsCleared => {
+            let timestamp = start.elapsed().as_secs_f64() * 1000.0;
+            instance.draw(timestamp);
+        }
+
+        Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
+
+        Event::WindowEvent { event, .. } => {
+            if event == WindowEvent::CloseRequested {
+                *control_flow = ControlFlow::Exit
             }
         }
 
-        let timestamp = start.elapsed().as_millis() as f64;
-        match window_mode {
-            WindowMode::AllDisplays(ref mut instances) => {
-                for instance in instances.iter_mut() {
-                    instance.draw(timestamp);
-                }
+        _ => (),
+    }
+}
+
+fn run_main_loop(
+    event: winit::event::Event<()>,
+    _window_target: &winit::event_loop::EventLoopWindowTarget<()>,
+    control_flow: &mut winit::event_loop::ControlFlow,
+    instances: &mut HashMap<WindowId, Instance>,
+    start: std::time::Instant,
+) {
+    use winit::event::{DeviceEvent, ElementState, Event, KeyboardInput, WindowEvent};
+    use winit::event_loop::ControlFlow;
+
+    *control_flow = ControlFlow::Poll;
+
+    match event {
+        Event::MainEventsCleared => {
+            for (_, instance) in instances.iter_mut() {
+                instance.window.request_redraw();
             }
-            WindowMode::PreviewWindow {
-                ref mut instance, ..
-            } => instance.draw(timestamp),
-        }
-    }
-
-    Ok(())
-}
-
-fn read_flags() -> Result<Mode, String> {
-    match std::env::args().nth(1).as_mut().map(|s| {
-        s.make_ascii_lowercase();
-        s.as_str()
-    }) {
-        // Settings panel
-        //
-        // /c -> you’re supposed to support this, but AFAIK the only way to get
-        // this is to manually send it from the command line.
-        //
-        // /c:HWND -> the screensaver configuration window gives a window
-        // handle. I’m not sure what it’s for. Maybe you’re supposed to use it
-        // to close your settings window if the parent windows closes?
-        //
-        // No flags -> <right click + configure> sends no flags whatsoever.
-        Some("/c") | None => Ok(Mode::Settings),
-        Some(s) if s.starts_with("/c:") => Ok(Mode::Settings),
-
-        // Run screensaver
-        //
-        // /s -> run the screensaver.
-        //
-        // /S -> <right click + test> sends an uppercase /S, which doesn’t
-        // seem to be documented anywhere.
-        Some("/s") => Ok(Mode::Screensaver),
-
-        // Run preview
-        //
-        // /p HWND -> draw the screensaver in the preview window.
-        //
-        // /p:HWND -> TODO: apparently, this is also an option you need to
-        // support.
-        Some("/p") => {
-            let handle_ptr = std::env::args()
-                .nth(2)
-                .ok_or("I can’t find the window to show a screensaver preview.")?
-                .parse::<usize>()
-                .map_err(|e| e.to_string())?;
-
-            let mut handle = raw_window_handle::Win32Handle::empty();
-            handle.hwnd = handle_ptr as *mut c_void;
-            Ok(Mode::Preview(RawWindowHandle::Win32(handle)))
         }
 
-        Some(s) => {
-            return Err(format!("I don’t know what the argument {} is.", s));
-        }
-    }
-}
+        Event::RedrawRequested(window_id) => {
+            let instance = instances.get_mut(&window_id).expect("cannot find window");
+            let timestamp = start.elapsed().as_secs_f64() * 1000.0;
 
-#[derive(Clone, Copy, Debug, PartialEq)]
-struct Surface {
-    dpi: f64,
-    scale_factor: f64,
-    bounds: sdl2::rect::Rect,
-}
-
-impl Surface {
-    pub fn physical_size(&self) -> (u32, u32) {
-        self.bounds.size()
-    }
-
-    pub fn logical_size(&self) -> (u32, u32) {
-        let (physical_width, physical_height) = self.bounds.size();
-        let logical_width = (physical_width as f64 / self.scale_factor) as u32;
-        let logical_height = (physical_height as f64 / self.scale_factor) as u32;
-        (logical_width, logical_height)
-    }
-
-    pub fn from_display_id(
-        video_subsystem: &sdl2::VideoSubsystem,
-        id: i32,
-    ) -> Result<Self, String> {
-        let bounds = video_subsystem.display_bounds(id)?;
-        let (_, dpi, _) = video_subsystem.display_dpi(id)?;
-        Ok(Self::from_bounds(bounds, dpi as f64))
-    }
-
-    pub fn from_window(
-        video_subsystem: &sdl2::VideoSubsystem,
-        window: &sdl2::video::Window,
-    ) -> Result<Self, String> {
-        let id = window.display_index().unwrap_or(0);
-        let (x, y) = window.position();
-        let (width, height) = window.size();
-        let bounds = sdl2::rect::Rect::new(x, y, width, height);
-        let (_, dpi, _) = video_subsystem.display_dpi(id)?;
-
-        Ok(Self::from_bounds(bounds, dpi.into()))
-    }
-
-    fn from_bounds(bounds: sdl2::rect::Rect, dpi: f64) -> Self {
-        let scale_factor = dpi / BASE_DPI;
-        Surface {
-            dpi,
-            scale_factor,
-            bounds,
-        }
-    }
-
-    fn union(&self, other: Self) -> Self {
-        Self {
-            dpi: self.dpi,
-            scale_factor: self.scale_factor,
-            bounds: self.bounds.union(other.bounds),
-        }
-    }
-
-    /// Detect and query all displays. We check if the displays are matching, in
-    /// which case we combine them into a single spanning display.
-    pub fn detect_displays(video_subsystem: &sdl2::VideoSubsystem) -> Result<Vec<Surface>, String> {
-        let display_count = video_subsystem.num_video_displays()?;
-        log::debug!("Detected {} displays", display_count);
-
-        let mut displays = Vec::with_capacity(display_count as usize);
-        for id in 0..display_count {
-            displays.push(Surface::from_display_id(video_subsystem, id)?);
+            if timestamp < FADE_TO_BLACK_DURATION {
+                instance.fade_to_black(timestamp);
+            } else {
+                instance.draw(timestamp);
+            }
         }
 
-        Ok(Surface::combine_displays(&displays))
-    }
+        Event::LoopDestroyed => *control_flow = ControlFlow::Exit,
 
-    /// Combine multiple displays into a single surface, where possible. This is
-    /// kind of like a scan-line algorithm. We first merge along the x-axis, and
-    /// then merge the y-axis.
-    ///
-    /// This will only combine identical displays arranged in a rectangle. It
-    /// won’t try to cover all displays if you have some weird setup.
-    fn combine_displays(surfaces: &[Surface]) -> Vec<Surface> {
-        let horizontally_merged = Self::merge_edges(surfaces, |surface| {
-            (surface.bounds.top(), surface.bounds.bottom())
-        });
-        let mut fully_merged = Self::merge_edges(&horizontally_merged, |surface| {
-            (surface.bounds.left(), surface.bounds.right())
-        });
-        fully_merged.sort_by_key(|s| s.bounds.x());
-        fully_merged
-    }
+        Event::WindowEvent { event, .. } => match event {
+            WindowEvent::CloseRequested { .. }
+            | WindowEvent::KeyboardInput {
+                input:
+                    KeyboardInput {
+                        state: ElementState::Pressed,
+                        ..
+                    },
+                is_synthetic: false,
+                ..
+            }
+            | WindowEvent::MouseInput { .. } => *control_flow = ControlFlow::Exit,
+            _ => (),
+        },
 
-    fn merge_edges<T>(surfaces: &[Surface], get_edges: T) -> Vec<Surface>
-    where
-        T: Fn(&Surface) -> (i32, i32),
-    {
-        use std::collections::HashMap;
+        Event::DeviceEvent {
+            event: DeviceEvent::MouseMotion {
+                delta: (xrel, yrel),
+            },
+            ..
+        } if f64::max(xrel.abs(), yrel.abs()) > MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER => {
+            *control_flow = ControlFlow::Exit
+        }
 
-        let mut surface_map: HashMap<(i32, i32), Surface> = HashMap::new();
-        surfaces.iter().for_each(|surface| {
-            let edges = get_edges(surface);
-            let new_surface = match surface_map.get(&edges) {
-                Some(existing_surface) => existing_surface.union(*surface),
-                None => *surface,
-            };
-            surface_map.insert(edges, new_surface);
-        });
-        surface_map.into_values().collect::<Vec<Surface>>()
+        _ => (),
     }
 }
 
 #[cfg(windows)]
-unsafe fn set_window_parent_win32(handle: HWND, parent_handle: HWND) -> bool {
-    use winapi::shared::basetsd::LONG_PTR;
-    use winapi::um::winuser::{
-        GetWindowLongPtrA, SetParent, SetWindowLongPtrA, GWL_STYLE, WS_CHILD, WS_POPUP,
+fn new_preview_window(
+    event_loop: &winit::event_loop::EventLoop<()>,
+    raw_window_handle: RawWindowHandle,
+    config: &Config,
+) -> Result<Instance, String> {
+    use windows::Win32::Foundation::{HWND, RECT};
+    use windows::Win32::UI::WindowsAndMessaging::GetClientRect;
+    use winit::dpi::{PhysicalSize, Size};
+
+    let win32_handle = match raw_window_handle {
+        RawWindowHandle::Win32(handle) => handle,
+        _ => return Err("This platform is not supported yet".to_string()),
     };
 
-    // Attach our window to the parent window.
-    // You can get more error information with `GetLastError`
-    // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setparent
-    if SetParent(handle, parent_handle).is_null() {
-        return false;
+    let preview_hwnd = HWND(win32_handle.hwnd as _);
+
+    let mut rect = RECT::default();
+    unsafe {
+        GetClientRect(preview_hwnd, &mut rect);
     }
 
-    // `SetParent` doesn’t actually set the window style flags. `WS_POPUP` and
-    // `WS_CHILD` are mutually exclusive.
-    SetWindowLongPtrA(
-        handle,
-        GWL_STYLE,
-        (GetWindowLongPtrA(handle, GWL_STYLE) & !WS_POPUP as LONG_PTR) | WS_CHILD as LONG_PTR,
+    let inner_size = PhysicalSize::new(rect.right as u32, rect.bottom as u32);
+
+    let window = unsafe {
+        WindowBuilder::new()
+            .with_title("Flux Preview")
+            .with_parent_window(Some(raw_window_handle))
+            .with_inner_size(Size::Physical(inner_size))
+            .with_decorations(false)
+            .with_visible(false)
+            .build(event_loop)
+            .unwrap()
+    };
+
+    let (gl_context, gl_surface, glow_context) = new_gl_context(
+        event_loop,
+        raw_window_handle,
+        inner_size,
+        Some(window.raw_window_handle()),
     );
 
-    true
+    let wallpaper = window
+        .current_monitor()
+        .and_then(|monitor| wallpaper::get(&monitor).ok());
+
+    let physical_size = window.inner_size();
+    let scale_factor = window.scale_factor();
+    let logical_size = physical_size.to_logical(scale_factor);
+    let settings = config.to_settings(wallpaper);
+    let flux = Flux::new(
+        &glow_context,
+        logical_size.width,
+        logical_size.height,
+        physical_size.width,
+        physical_size.height,
+        &Rc::new(settings),
+    )
+    .map_err(|err| err.to_string())?;
+
+    Ok(Instance {
+        flux,
+        gl_context,
+        gl_surface,
+        gl: Rc::clone(&glow_context),
+        window,
+    })
+}
+
+fn new_instance(
+    event_loop: &winit::event_loop::EventLoop<()>,
+    config: &Config,
+    surface: &surface::Surface,
+) -> Result<Instance, String> {
+    let window = WindowBuilder::new()
+        .with_title("Flux")
+        .with_inner_size(surface.size)
+        .with_position(surface.position)
+        // Skips the default Windows window animation
+        .with_maximized(true)
+        // Hide the window until we've initialized Flux
+        .with_visible(false)
+        // Enable transparency to draw the fade in
+        .with_transparent(true)
+        .with_decorations(false)
+        .with_undecorated_shadow(false)
+        .with_skip_taskbar(true)
+        .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
+        .build(event_loop)
+        .unwrap();
+
+    let (gl_context, gl_surface, glow_context) = new_gl_context(
+        event_loop,
+        window.raw_window_handle(),
+        window.inner_size(),
+        None,
+    );
+
+    let physical_size = surface.size;
+    let logical_size = physical_size.to_logical(surface.scale_factor);
+    let settings = config.to_settings(surface.wallpaper.clone());
+    let flux = Flux::new(
+        &glow_context,
+        logical_size.width,
+        logical_size.height,
+        physical_size.width,
+        physical_size.height,
+        &Rc::new(settings),
+    )
+    .map_err(|err| err.to_string())?;
+
+    window.set_cursor_visible(false);
+
+    Ok(Instance {
+        flux,
+        gl_context,
+        gl_surface,
+        gl: Rc::clone(&glow_context),
+        window,
+    })
+}
+
+/// Create an OpenGL context, surface, and initialize the glow API.
+///
+/// Hacks
+///
+/// The optional attr_window should be used when rendering to the preview window. Instead of just
+/// using the handle to the preview window, pass the window handle for the invisible event window
+/// to work around a bug where Windows complains that it can't find the window class.
+///
+/// This code has been modified from glutin-winit and only supports WGL (Windows).
+fn new_gl_context(
+    event_loop: &winit::event_loop::EventLoop<()>,
+    raw_window_handle: RawWindowHandle,
+    inner_size: winit::dpi::PhysicalSize<u32>,
+
+    // A hack to create the gl_display using the invisible event window
+    // we create for the preview.
+    attr_window: Option<RawWindowHandle>,
+) -> (
+    PossiblyCurrentContext,
+    Surface<WindowSurface>,
+    Rc<glow::Context>,
+) {
+    let template = ConfigTemplateBuilder::new()
+        .with_alpha_size(8)
+        .with_transparency(true)
+        // Double buffering doesn't work with transparency
+        .with_single_buffering(true)
+        .compatible_with_native_window(raw_window_handle)
+        .build();
+
+    // Only WGL requires a window to create a full-fledged OpenGL context
+    let attr_window = attr_window.unwrap_or(raw_window_handle);
+    let preference = DisplayApiPreference::WglThenEgl(Some(attr_window));
+    let gl_display = unsafe { Display::new(event_loop.raw_display_handle(), preference).unwrap() };
+
+    let gl_config = unsafe {
+        gl_display
+            .find_configs(template)
+            .unwrap()
+            .reduce(|accum, config| {
+                let transparency_check = config.supports_transparency().unwrap_or(false)
+                    & !accum.supports_transparency().unwrap_or(false);
+
+                if transparency_check || config.num_samples() > accum.num_samples() {
+                    config
+                } else {
+                    accum
+                }
+            })
+            .unwrap()
+    };
+
+    log::debug!(
+        "Picked a config with {} samples and {:?} transparency",
+        gl_config.num_samples(),
+        gl_config.supports_transparency()
+    );
+
+    let context_attributes = ContextAttributesBuilder::new()
+        .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+        .build(Some(raw_window_handle));
+
+    let not_current_gl_context = unsafe {
+        gl_display
+            .create_context(&gl_config, &context_attributes)
+            .expect("failed to create OpenGL context")
+    };
+
+    let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
+    let attrs =
+        SurfaceAttributesBuilder::<WindowSurface>::new().build(raw_window_handle, width, height);
+
+    let gl_surface = unsafe {
+        gl_config
+            .display()
+            .create_window_surface(&gl_config, &attrs)
+            .unwrap()
+    };
+
+    // Make it current.
+    let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
+
+    // Try setting vsync.
+    if let Err(res) =
+        gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+    {
+        log::error!("Failed to set vsync: {res:?}");
+    }
+
+    let glow_context = unsafe {
+        glow::Context::from_loader_function(|s| {
+            gl_display.get_proc_address(&CString::new(s).unwrap().as_c_str()) as *const _
+        })
+    };
+    log::debug!("{:?}", glow_context.version());
+
+    (gl_context, gl_surface, Rc::new(glow_context))
 }
 
 // Specifying DPI awareness in the app manifest does not apply when running in a
 // preview window.
 #[cfg(windows)]
 pub fn set_dpi_awareness() -> Result<(), String> {
-    use std::ptr;
-    use winapi::{
-        shared::winerror::{E_INVALIDARG, S_OK},
-        um::shellscalingapi::{
-            GetProcessDpiAwareness, SetProcessDpiAwareness, PROCESS_DPI_UNAWARE,
-            PROCESS_PER_MONITOR_DPI_AWARE,
-        },
+    use windows::Win32::Foundation::E_INVALIDARG;
+    use windows::Win32::UI::HiDpi::{
+        GetProcessDpiAwareness, SetProcessDpiAwareness, PROCESS_PER_MONITOR_DPI_AWARE,
+        PROCESS_SYSTEM_DPI_AWARE,
     };
 
-    match unsafe { SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE) } {
-        S_OK => Ok(()),
-        E_INVALIDARG => Err("Can’t enable support for high-resolution screens.".to_string()),
-        // The app manifest settings, if applied, trigger this path.
-        _ => {
-            let mut awareness = PROCESS_DPI_UNAWARE;
-            match unsafe { GetProcessDpiAwareness(ptr::null_mut(), &mut awareness) } {
-                S_OK if awareness == PROCESS_PER_MONITOR_DPI_AWARE => Ok(()),
-                _ => Err("Can’t enable support for high-resolution screens. The setting has been modified and set to an unsupported value.".to_string()),
+    if let Err(err) = unsafe { SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE) } {
+        match err.code() {
+            E_INVALIDARG => return Err("Can’t enable support for high-resolution screens.".to_string()),
+            // The app manifest settings, if applied, trigger this path.
+            _ => {
+                return match unsafe { GetProcessDpiAwareness(None) } {
+                    Ok(awareness)
+                        if awareness == PROCESS_PER_MONITOR_DPI_AWARE
+                        || awareness == PROCESS_SYSTEM_DPI_AWARE => Ok(()),
+                    _ => Err("Can’t enable support for high-resolution screens. The setting has been modified and set to an unsupported value.".to_string()),
+                }
             }
         }
     }
+
+    Ok(())
 }
 
-#[cfg(test)]
-mod test {
-    use super::*;
-    use sdl2::rect::Rect;
-
-    #[test]
-    fn it_does_not_combine_two_different_displays() {
-        let display0 = Surface::from_bounds(Rect::new(0, 0, 3360, 2100), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(
-            Rect::new(display0.bounds.width() as i32, 0, 2560, 1440),
-            BASE_DPI as f64,
-        );
-
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1]),
-            vec![display0, display1]
-        );
-    }
-
-    #[test]
-    fn it_partially_combines_two_1440p_displays_and_a_separate_laptop_display() {
-        // 1440p + 1440p + laptop
-        let display0 = Surface::from_bounds(Rect::new(-2560, 0, 2560, 1440), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
-        let display2 = Surface::from_bounds(Rect::new(2560, 0, 3360, 2100), BASE_DPI as f64);
-
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1, display2]),
-            vec![
-                Surface::from_bounds(Rect::new(-2560, 0, 5120, 1440), BASE_DPI as f64),
-                display2
-            ]
-        );
-
-        // laptop + 1440p + 1440p
-        let display2 = Surface::from_bounds(Rect::new(-1920, 360, 1920, 1080), BASE_DPI as f64);
-        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
-
-        assert_eq!(
-            Surface::combine_displays(&[display2, display0, display1]),
-            vec![
-                display2,
-                Surface::from_bounds(Rect::new(0, 0, 5120, 1440), BASE_DPI as f64),
-            ]
-        );
-    }
-
-    #[test]
-    fn it_combines_two_1440p_displays() {
-        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(
-            Rect::new(display0.bounds.width() as i32, 0, 2560, 1440),
-            BASE_DPI as f64,
-        );
-
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1]),
-            vec![Surface::from_bounds(
-                Rect::new(0, 0, 5120, 1440),
-                BASE_DPI as f64
-            )]
-        );
-    }
-
-    #[test]
-    fn it_combines_three_1440p_displays() {
-        let display0 = Surface::from_bounds(Rect::new(-2560, 0, 2560, 1440), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
-        let display2 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
-
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1, display2]),
-            vec![Surface::from_bounds(
-                Rect::new(-2560, 0, 2560 * 3, 1440),
-                BASE_DPI as f64
-            )]
-        );
-    }
-
-    #[test]
-    fn it_combines_a_grid_of_displays() {
-        let display0 = Surface::from_bounds(Rect::new(0, 0, 2560, 1440), BASE_DPI as f64);
-        let display1 = Surface::from_bounds(Rect::new(2560, 0, 2560, 1440), BASE_DPI as f64);
-        let display2 = Surface::from_bounds(Rect::new(0, 1440, 2560, 1440), BASE_DPI as f64);
-        let display3 = Surface::from_bounds(Rect::new(2560, 1440, 2560, 1440), BASE_DPI as f64);
-
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1, display2, display3]),
-            vec![Surface::from_bounds(
-                Rect::new(0, 0, 2560 * 2, 1440 * 2),
-                BASE_DPI as f64
-            ),]
-        );
-
-        let laptop = Surface::from_bounds(Rect::new(2560 * 2, 0, 1920, 1080), BASE_DPI as f64);
-        assert_eq!(
-            Surface::combine_displays(&[display0, display1, display2, display3, laptop]),
-            vec![
-                Surface::from_bounds(Rect::new(0, 0, 2560 * 2, 1440 * 2), BASE_DPI as f64),
-                laptop
-            ]
-        );
+/// [`winit::dpi::PhysicalSize<u32>`] non-zero extensions.
+trait NonZeroU32PhysicalSize {
+    /// Converts to non-zero `(width, height)`.
+    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)>;
+}
+impl NonZeroU32PhysicalSize for winit::dpi::PhysicalSize<u32> {
+    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)> {
+        let w = NonZeroU32::new(self.width)?;
+        let h = NonZeroU32::new(self.height)?;
+        Some((w, h))
     }
 }
