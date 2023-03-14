@@ -364,7 +364,6 @@ fn new_instance(
         .with_decorations(false)
         .with_undecorated_shadow(false)
         .with_skip_taskbar(true)
-        .with_window_level(winit::window::WindowLevel::AlwaysOnTop)
         .build(event_loop)
         .unwrap();
 
@@ -424,8 +423,6 @@ fn new_gl_context(
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
         .with_transparency(true)
-        // Double buffering doesn't work with transparency
-        .with_single_buffering(false)
         .compatible_with_native_window(raw_window_handle)
         .build();
 
