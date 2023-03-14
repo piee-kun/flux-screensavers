@@ -425,7 +425,7 @@ fn new_gl_context(
         .with_alpha_size(8)
         .with_transparency(true)
         // Double buffering doesn't work with transparency
-        .with_single_buffering(true)
+        .with_single_buffering(false)
         .compatible_with_native_window(raw_window_handle)
         .build();
 
