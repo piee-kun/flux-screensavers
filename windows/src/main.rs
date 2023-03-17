@@ -457,14 +457,24 @@ fn new_gl_context(
         gl_config.supports_transparency()
     );
 
+    // Request the minimum required OpenGL version for Flux
     let context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
+        .build(Some(raw_window_handle));
+
+    // Fallback to GLES 3.0 (aka WebGL 2.0)
+    let fallback_context_attributes = ContextAttributesBuilder::new()
+        .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
         .build(Some(raw_window_handle));
 
     let not_current_gl_context = unsafe {
         gl_display
             .create_context(&gl_config, &context_attributes)
-            .expect("failed to create OpenGL context")
+            .unwrap_or_else(|_| {
+                gl_display
+                    .create_context(&gl_config, &fallback_context_attributes)
+                    .expect("failed to create OpenGL context")
+            })
     };
 
     let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
