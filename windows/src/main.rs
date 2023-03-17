@@ -137,6 +137,9 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
 }
 
 fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
+    #[cfg(windows)]
+    set_dpi_awareness()?;
+
     let event_loop = winit::event_loop::EventLoop::new();
 
     match mode {
