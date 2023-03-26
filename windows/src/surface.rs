@@ -27,13 +27,22 @@ impl Surface {
         //     return None;
         // }
 
-        self.position = PhysicalPosition::new(
+        let top_left = PhysicalPosition::new(
             self.position.x.min(surface.position.x),
             self.position.y.min(surface.position.y),
         );
+
+        let bottom_right = PhysicalPosition::new(
+            (self.position.x + self.size.width as i32)
+                .max(surface.position.x + surface.size.width as i32),
+            (self.position.y + self.size.height as i32)
+                .max(surface.position.y + surface.size.height as i32),
+        );
+
+        self.position = top_left;
         self.size = PhysicalSize::new(
-            self.size.width + surface.size.width,
-            self.size.height + surface.size.height,
+            top_left.x.abs_diff(bottom_right.x),
+            top_left.y.abs_diff(bottom_right.y),
         );
     }
 }
