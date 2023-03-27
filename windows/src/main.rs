@@ -378,7 +378,7 @@ fn new_instance(
     surface: &surface::Surface,
 ) -> Result<Instance, String> {
     // Create the SDL window
-    let mut window = video_subsystem
+    let window = video_subsystem
         .window("Flux", surface.size.width, surface.size.height)
         .position(surface.position.x, surface.position.y)
         .input_grabbed()
@@ -388,10 +388,6 @@ fn new_instance(
         .opengl()
         .build()
         .map_err(|err| err.to_string())?;
-
-    if let Err(err) = window.set_opacity(0.0) {
-        log::warn!("Transparent window not supported: {}", err);
-    }
 
     let (gl_context, gl_surface, glow_context) = new_gl_context(
         window.raw_display_handle(),
