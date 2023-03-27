@@ -98,6 +98,10 @@
           release = true;
           doCheck = false;
 
+          nativeBuildInputs = [
+            pkgs.pkgsBuildHost.pkg-config
+          ];
+
           buildInputs = [
             pkgs.windows.pthreads
             pkgs.windows.mingw_w64_pthreads

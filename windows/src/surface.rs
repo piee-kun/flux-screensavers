@@ -1,5 +1,7 @@
 use std::path;
-use winit_compat::{MonitorHandle, PhysicalPosition, PhysicalSize};
+
+use winit::dpi::{PhysicalPosition, PhysicalSize};
+use winit::monitor::MonitorHandle;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Surface {
@@ -44,9 +46,7 @@ impl Surface {
     }
 }
 
-pub fn combine_monitors(
-    monitors: &[(monitor::MonitorHandle, Option<path::PathBuf>)],
-) -> Vec<Surface> {
+pub fn combine_monitors(monitors: &[(MonitorHandle, Option<path::PathBuf>)]) -> Vec<Surface> {
     let surfaces = monitors
         .iter()
         .map(|(handle, wallpaper)| Surface::from_monitor(handle, wallpaper))

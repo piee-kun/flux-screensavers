@@ -11,7 +11,7 @@ mod winit_compat;
 use cli::Mode;
 use config::Config;
 use flux::Flux;
-use winit_compat::{HasMonitors, HasWinitCompat, MonitorHandle, PhysicalSize};
+use winit_compat::{HasMonitors, HasWinitWindow, MonitorHandle};
 
 use std::collections::HashMap;
 use std::ffi::CString;
@@ -29,6 +29,7 @@ use raw_window_handle::{
 use windows::Win32::Foundation::HWND;
 
 use sdl2::video::Window;
+use winit::dpi::PhysicalSize;
 
 use glutin::config::ConfigTemplateBuilder;
 use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
@@ -187,7 +188,7 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
             sdl_context.mouse().set_relative_mouse_mode(true);
 
             // Unhide windows after context setup
-            for instance in instances.values() {
+            for instance in instances.values_mut() {
                 instance.window.show();
             }
 
@@ -308,8 +309,13 @@ fn new_preview_window(
         ));
     }
 
-    let preview_window: Window =
-        unsafe { Window::from_ll(video_subsystem.clone(), sdl_preview_window) };
+    let preview_window: Window = unsafe {
+        Window::from_ll(
+            video_subsystem.clone(),
+            sdl_preview_window,
+            std::ptr::null_mut(),
+        )
+    };
 
     // You need to create an actual window to listen to events. We’ll
     // then link this to the preview window as a child to cleanup when
@@ -373,7 +379,7 @@ fn new_instance(
     surface: &surface::Surface,
 ) -> Result<Instance, String> {
     // Create the SDL window
-    let window = video_subsystem
+    let mut window = video_subsystem
         .window("Flux", surface.size.width, surface.size.height)
         .position(surface.position.x, surface.position.y)
         .input_grabbed()
