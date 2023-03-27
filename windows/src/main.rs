@@ -146,13 +146,12 @@ fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     #[cfg(windows)]
     set_dpi_awareness()?;
 
+    // By default, SDL disables the screensaver and doesn’t allow the display to sleep. We want
+    // both of these things to happen in both screensaver and preview modes.
+    sdl2::hint::set("SDL_VIDEO_ALLOW_SCREENSAVER", "1");
+
     let sdl_context = sdl2::init()?;
     let video_subsystem = sdl_context.video()?;
-
-    // SDL, by default, disables the screensaver and doesn’t allow the display
-    // to sleep. We want both of these things to happen in both screensaver and
-    // preview modes.
-    video_subsystem.enable_screen_saver();
 
     match mode {
         Mode::Preview(raw_window_handle) => {
