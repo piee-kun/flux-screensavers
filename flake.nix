@@ -63,10 +63,22 @@
         cargo = rustToolchain;
         rustfmt = rustToolchain;
       });
+
+      SDL2_static = pkgs.SDL2.overrideAttrs (old: rec {
+        version = "2.26.4";
+        name = "SDL2-static-${version}";
+        src = builtins.fetchurl {
+          url =
+            "https://www.libsdl.org/release/${old.pname}-${version}.tar.gz";
+          sha256 =
+            "sha256:0cbji2l35j5w9v5kkb9s16n6w03xg81kj2zqygcqlxpvk1j6h3qs";
+        };
+        dontDisableStatic = true;
+      });
     in rec {
       devShells = {
         default = pkgs.pkgsBuildHost.mkShell {
-          inputsFrom = [packages.default];
+         # inputsFrom = [packages.default];
 
           packages = with pkgs.pkgsBuildHost; [
             rustToolchain
@@ -75,6 +87,8 @@
             cmake
             alejandra
           ];
+
+          RUSTFLAGS = "-L ${SDL2_static}/lib";
         };
       };
 
@@ -82,14 +96,17 @@
         default = craneLib.buildPackage {
           src = ./windows;
           release = true;
+          doCheck = false;
 
           buildInputs = [
             pkgs.windows.pthreads
             pkgs.windows.mingw_w64_pthreads
+            SDL2_static
           ];
 
           CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
+          RUSTFLAGS = "-L ${SDL2_static}/lib";
 
           # Change the extension to .scr (Windows screensaver)
           postInstall = ''

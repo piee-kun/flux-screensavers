@@ -1,8 +1,5 @@
 use std::path;
-use winit::{
-    dpi::{PhysicalPosition, PhysicalSize},
-    monitor,
-};
+use winit_compat::{MonitorHandle, PhysicalPosition, PhysicalSize};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Surface {
@@ -13,7 +10,7 @@ pub struct Surface {
 }
 
 impl Surface {
-    fn from_monitor(monitor: &monitor::MonitorHandle, wallpaper: &Option<path::PathBuf>) -> Self {
+    fn from_monitor(monitor: &MonitorHandle, wallpaper: &Option<path::PathBuf>) -> Self {
         Self {
             position: monitor.position(),
             size: monitor.size(),
