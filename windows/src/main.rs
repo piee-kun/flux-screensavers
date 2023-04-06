@@ -443,6 +443,7 @@ fn new_gl_context(
     let template = ConfigTemplateBuilder::new()
         .with_alpha_size(8)
         .with_transparency(true)
+        .with_multisampling(0)
         .compatible_with_native_window(raw_window_handle)
         .build();
 
@@ -459,7 +460,7 @@ fn new_gl_context(
                 let transparency_check = config.supports_transparency().unwrap_or(false)
                     & !accum.supports_transparency().unwrap_or(false);
 
-                if transparency_check || config.num_samples() > accum.num_samples() {
+                if transparency_check {
                     config
                 } else {
                     accum
@@ -521,6 +522,11 @@ fn new_gl_context(
         })
     };
     log::debug!("{:?}", glow_context.version());
+
+    // Set common GL state
+    unsafe {
+        glow_context.disable(GL::MULTISAMPLE);
+    }
 
     (gl_context, gl_surface, Rc::new(glow_context))
 }
