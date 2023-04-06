@@ -385,9 +385,10 @@ fn new_instance(
         .borderless()
         .hidden()
         .allow_highdpi()
-        .opengl()
         .build()
         .map_err(|err| err.to_string())?;
+
+    unsafe { enable_transparency(&window.raw_window_handle()) };
 
     let (gl_context, gl_surface, glow_context) = new_gl_context(
         window.raw_display_handle(),
@@ -441,7 +442,14 @@ fn new_gl_context(
     Rc<glow::Context>,
 ) {
     let template = ConfigTemplateBuilder::new()
+        .with_buffer_type(glutin::config::ColorBufferType::Rgb {
+            r_size: 8,
+            g_size: 8,
+            b_size: 8,
+        })
         .with_alpha_size(8)
+        .with_depth_size(0)
+        .with_stencil_size(0)
         .with_transparency(true)
         .with_multisampling(0)
         .compatible_with_native_window(raw_window_handle)
@@ -466,7 +474,7 @@ fn new_gl_context(
                     accum
                 }
             })
-            .unwrap()
+            .expect("cannot find a suitable GL config")
     };
 
     log::debug!(
@@ -578,6 +586,35 @@ unsafe fn set_window_parent_win32(handle: HWND, parent_handle: HWND) -> bool {
     SetWindowLongPtrA(handle, GWL_STYLE, new_style.0 as isize);
 
     true
+}
+
+#[cfg(windows)]
+unsafe fn enable_transparency(handle: &RawWindowHandle) {
+    use windows::Win32::Graphics::{
+        Dwm::{DwmEnableBlurBehindWindow, DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND},
+        Gdi::{CreateRectRgn, DeleteObject},
+    };
+
+    let hwnd = match handle {
+        raw_window_handle::RawWindowHandle::Win32(event_window_handle) => {
+            HWND(event_window_handle.hwnd as _)
+        }
+        _ => panic!("This platform is not supported yet"),
+    };
+
+    // Empty region for the blur effect, so the window is fully transparent
+    let region = CreateRectRgn(0, 0, -1, -1);
+
+    let bb = DWM_BLURBEHIND {
+        dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
+        fEnable: true.into(),
+        hRgnBlur: region,
+        fTransitionOnMaximized: false.into(),
+    };
+    if let Err(err) = DwmEnableBlurBehindWindow(hwnd, &bb) {
+        log::warn!("Failed to set window transparency: {:?}", err);
+    }
+    DeleteObject(region);
 }
 
 /// [`winit::dpi::PhysicalSize<u32>`] non-zero extensions.
