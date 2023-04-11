@@ -115,7 +115,7 @@
           # Change the extension to .scr (Windows screensaver)
           postInstall = ''
             if [[ $out != *"deps"* ]]; then
-              mv $out/bin/Flux.exe "$out/bin/Flux.scr"
+              cp $out/bin/Flux.exe "$out/bin/Flux.scr"
             fi
           '';
         };
