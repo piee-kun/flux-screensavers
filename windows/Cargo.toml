@@ -17,9 +17,11 @@ FileDescription = "An ode to the macOS Drift screensaver"
 LegalCopyright = "© 2022 Sander Melnikov"
 
 [profile.release]
+codegen-units = 1 # Allow further optimisations by disabling parallel compilation
+lto = true # Enable link-time optimisation
 opt-level = 3
-lto = true
-strip = true
+panic = "abort" # Strip expensive panic unwinding code
+strip = true # Remove debug symbols
 
 [dependencies]
 directories = "4"
