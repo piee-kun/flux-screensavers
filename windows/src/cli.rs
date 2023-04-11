@@ -37,18 +37,20 @@ pub fn read_flags() -> Result<Mode, String> {
         // seem to be documented anywhere.
         Some("/s") => Ok(Mode::Screensaver),
 
-        // Run preview
+        // Run preview or in Wallpaper Engine
         //
         // /p HWND -> draw the screensaver in the preview window.
         //
         // /p:HWND -> TODO: apparently, this is also an option you need to
         // support.
-        Some("/p") => {
+        //
+        // -parenthwnd HWND -> Wallpaper Engine
+        Some("/p") | Some("-parenthwnd") => {
             let handle_ptr = std::env::args()
                 .nth(2)
-                .ok_or("I can’t find the window to show the screensaver preview.")?
+                .ok_or("Can't find the window to show the screensaver preview.")?
                 .parse::<usize>()
-                .map_err(|e| e.to_string())?;
+                .map_err(|e| format!("Can't parse the window handle: {}", e))?;
 
             let mut handle = raw_window_handle::Win32WindowHandle::empty();
             handle.hwnd = handle_ptr as *mut c_void;
