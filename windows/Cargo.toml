@@ -49,7 +49,7 @@ default-features = false
 [dependencies.sdl2]
 version = "0.35.2"
 default-features = false
-features = [ "static-link", "use-pkgconfig", "raw-window-handle" ]
+features = [ "static-link", "raw-window-handle" ]
 
 [dependencies.sdl2-sys]
 version = "0.35.2"

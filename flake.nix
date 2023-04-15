@@ -74,6 +74,13 @@
             "sha256:0cbji2l35j5w9v5kkb9s16n6w03xg81kj2zqygcqlxpvk1j6h3qs";
         };
         dontDisableStatic = true;
+
+        # When statically linking for Windows, rust-sdl2 expects the library to be called 'SDL2-static'.
+        # https://github.com/Rust-SDL2/rust-sdl2/blob/ffa4eb0b15439463561014f2d3c9d9171059d492/sdl2-sys/build.rs#L237-L238
+        postInstall = ''
+          mv $out/lib/libSDL2.a $out/lib/libSDL2-static.a
+          mv $out/lib/libSDL2.dll.a $out/lib/libSDL2-static.dll.a
+        '';
       });
     in rec {
       devShells = {
@@ -82,7 +89,6 @@
 
           packages = with pkgs.pkgsBuildHost; [
             rustToolchain
-            pkg-config
             fontconfig
             cmake
             alejandra
@@ -97,10 +103,6 @@
           src = ./windows;
           release = true;
           doCheck = false;
-
-          nativeBuildInputs = [
-            pkgs.pkgsBuildHost.pkg-config
-          ];
 
           buildInputs = [
             pkgs.windows.pthreads

@@ -2630,7 +2630,6 @@ source = "git+https://github.com/Rust-SDL2/rust-sdl2?branch=master#0c4fb75bc4797
 dependencies = [
  "cfg-if",
  "libc",
- "pkg-config",
  "version-compare",
 ]
 
