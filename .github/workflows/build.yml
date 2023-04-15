@@ -1,0 +1,14 @@
+name: "Build"
+
+on:
+  pull_request:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-windows:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: cachix/install-nix-action@v20
+      - run: nix build -L --show-trace
