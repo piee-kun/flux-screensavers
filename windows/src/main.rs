@@ -295,27 +295,6 @@ fn new_preview_window(
 
     let inner_size = PhysicalSize::new(rect.right as u32, rect.bottom as u32);
 
-    // Tell SDL that the window we’re about to adopt will be used with
-    // OpenGL.
-    sdl2::hint::set("SDL_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
-    let sdl_preview_window: *mut sdl2_sys::SDL_Window =
-        unsafe { sdl2_sys::SDL_CreateWindowFrom(win32_handle.hwnd as _) };
-
-    if sdl_preview_window.is_null() {
-        return Err(format!(
-            "Can’t create the preview window with the handle {:?}",
-            win32_handle.hwnd
-        ));
-    }
-
-    let preview_window: Window = unsafe {
-        Window::from_ll(
-            video_subsystem.clone(),
-            sdl_preview_window,
-            std::ptr::null_mut(),
-        )
-    };
-
     // You need to create an actual window to listen to events. We’ll
     // then link this to the preview window as a child to cleanup when
     // the preview dialog is closed.
