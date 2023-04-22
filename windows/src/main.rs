@@ -16,7 +16,7 @@ use winit_compat::{HasMonitors, HasWinitWindow, MonitorHandle};
 use std::collections::HashMap;
 use std::ffi::CString;
 use std::num::NonZeroU32;
-use std::{fs, path, process, rc::Rc};
+use std::{fmt, fs, path, process, rc::Rc};
 
 use glow as GL;
 use glow::HasContext;
@@ -31,7 +31,7 @@ use windows::Win32::Foundation::HWND;
 use sdl2::video::Window;
 use winit::dpi::PhysicalSize;
 
-use glutin::config::ConfigTemplateBuilder;
+use glutin::config::{ColorBufferType, Config as GLConfig, ConfigTemplateBuilder};
 use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
 use glutin::display::{Display, DisplayApiPreference, GetGlDisplay};
 use glutin::prelude::*;
@@ -439,27 +439,37 @@ fn new_gl_context(
     let preference = DisplayApiPreference::WglThenEgl(Some(attr_window));
     let gl_display = unsafe { Display::new(raw_display_handle, preference).unwrap() };
 
-    let gl_config = unsafe {
+    // Rank the configs by transparency and alpha size, while prefering the original order of the
+    // configs.
+    #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+    struct Rank {
+        supports_transparency: bool,
+        alpha_size: u8,
+        samples: i8,
+        prefer_original_order: isize,
+    }
+
+    let (gl_config_index, gl_config) = unsafe {
         gl_display
             .find_configs(template)
             .unwrap()
-            .reduce(|accum, config| {
-                let transparency_check = config.supports_transparency().unwrap_or(false)
-                    & !accum.supports_transparency().unwrap_or(false);
-
-                if transparency_check {
-                    config
-                } else {
-                    accum
-                }
+            .enumerate()
+            .map(|(index, config)| {
+                log::debug!("Found config #{index}:\n{}", HumanConfig::new(&config));
+                (index, config)
+            })
+            .max_by_key(|(index, config)| Rank {
+                supports_transparency: config.supports_transparency().unwrap_or(false),
+                alpha_size: config.alpha_size(),
+                samples: -(config.num_samples() as i8),
+                prefer_original_order: -(*index as isize),
             })
             .expect("cannot find a suitable GL config")
     };
 
     log::debug!(
-        "Picked a config with {} samples and {:?} transparency",
-        gl_config.num_samples(),
-        gl_config.supports_transparency()
+        "Picked config #{gl_config_index}:\n{}",
+        HumanConfig::new(&gl_config)
     );
 
     // Request the minimum required OpenGL version for Flux
@@ -606,5 +616,62 @@ impl NonZeroU32PhysicalSize for PhysicalSize<u32> {
         let w = NonZeroU32::new(self.width)?;
         let h = NonZeroU32::new(self.height)?;
         Some((w, h))
+    }
+}
+
+#[derive(Debug)]
+struct HumanConfig {
+    color_buffer_type: Option<ColorBufferType>,
+    alpha_size: u8,
+    depth_size: u8,
+    stencil_size: u8,
+    float_pixels: bool,
+    srgb_capable: bool,
+    supports_transparency: bool,
+    num_samples: u8,
+    hardware_accelerated: bool,
+}
+
+impl HumanConfig {
+    fn new(config: &GLConfig) -> Self {
+        Self {
+            color_buffer_type: config.color_buffer_type(),
+            alpha_size: config.alpha_size(),
+            depth_size: config.depth_size(),
+            stencil_size: config.stencil_size(),
+            float_pixels: config.float_pixels(),
+            srgb_capable: config.srgb_capable(),
+            supports_transparency: config.supports_transparency().unwrap_or(false),
+            num_samples: config.num_samples(),
+            hardware_accelerated: config.hardware_accelerated(),
+        }
+    }
+}
+
+impl fmt::Display for HumanConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let HumanConfig {
+            color_buffer_type,
+            alpha_size,
+            depth_size,
+            stencil_size,
+            float_pixels,
+            srgb_capable,
+            supports_transparency,
+            num_samples,
+            hardware_accelerated,
+        } = self;
+        write!(
+            f,
+            "Color buffer type: {color_buffer_type:?}\n\
+               Alpha size: {alpha_size}\n\
+               Depth size: {depth_size}\n\
+               Stencil size: {stencil_size}\n\
+               Float pixels: {float_pixels}\n\
+               sRGB capable: {srgb_capable}\n\
+               Supports transparency: {supports_transparency}\n\
+               Number of samples: {num_samples}\n\
+               Hardware accelerated: {hardware_accelerated}"
+        )
     }
 }
