@@ -427,10 +427,7 @@ fn new_gl_context(
             b_size: 8,
         })
         .with_alpha_size(8)
-        .with_depth_size(0)
-        .with_stencil_size(0)
         .with_transparency(true)
-        .with_multisampling(0)
         .compatible_with_native_window(raw_window_handle)
         .build();
 
