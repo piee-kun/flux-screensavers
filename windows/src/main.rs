@@ -1,5 +1,5 @@
 // Disable the console window that pops up when you launch the .exe
-// #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod cli;
 mod config;
@@ -11,6 +11,7 @@ mod winit_compat;
 use cli::Mode;
 use config::Config;
 use flux::Flux;
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use winit_compat::{HasMonitors, HasWinitWindow, MonitorHandle};
 
 use std::collections::HashMap;
@@ -37,6 +38,18 @@ use glutin::display::{Display, DisplayApiPreference, GetGlDisplay};
 use glutin::prelude::*;
 use glutin::surface::{Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
 
+// http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/OptimusRenderingPolicies.pdf
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static mut NvOptimusEnablement: i32 = 1;
+
+// https://gpuopen.com/learn/amdpowerxpressrequesthighperformance/
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static mut AmdPowerXpressRequestHighPerformance: i32 = 1;
+
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
 
 // In milliseconds
@@ -49,24 +62,70 @@ struct Instance {
     gl_context: PossiblyCurrentContext,
     gl_surface: Surface<WindowSurface>,
     gl: Rc<glow::Context>,
+    gl_window: Option<Window>,
     window: Window,
     dxgi_interop: DXGIInterop,
 }
 
 impl Instance {
     pub fn draw(&mut self, timestamp: f64) {
-        self.gl_context
-            .make_current(&self.gl_surface)
-            .expect("make OpenGL context current");
-
-        self.flux.compute(timestamp);
-
         unsafe {
+            use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
+            WaitForSingleObject(self.dxgi_interop.frame_latency_waitable_object, INFINITE);
+
             (self.dxgi_interop.dx_interop.DXLockObjectsNV)(
                 self.dxgi_interop.gl_handle_d3d,
                 1,
                 &mut self.dxgi_interop.color_handle_gl as *mut _,
             );
+
+            self.gl_context
+                .make_current(&self.gl_surface)
+                .expect("make OpenGL context current");
+
+            self.flux.compute(timestamp);
+
+            self.gl
+                .bind_framebuffer(GL::FRAMEBUFFER, Some(self.dxgi_interop.fbo));
+
+            self.flux.render();
+
+            self.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+
+            self.gl.finish();
+
+            (self.dxgi_interop.dx_interop.DXUnlockObjectsNV)(
+                self.dxgi_interop.gl_handle_d3d,
+                1,
+                &mut self.dxgi_interop.color_handle_gl as *mut _,
+            );
+
+            let _ = self.dxgi_interop.swap_chain.Present(1, 0);
+        }
+
+        // self.gl_surface
+        //     .swap_buffers(&self.gl_context)
+        //     .expect("swap OpenGL buffers");
+    }
+
+    pub fn fade_to_black(&mut self, timestamp: f64) {
+        unsafe {
+            use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
+            WaitForSingleObject(self.dxgi_interop.frame_latency_waitable_object, INFINITE);
+
+            (self.dxgi_interop.dx_interop.DXLockObjectsNV)(
+                self.dxgi_interop.gl_handle_d3d,
+                1,
+                &mut self.dxgi_interop.color_handle_gl as *mut _,
+            );
+
+            self.gl_context
+                .make_current(&self.gl_surface)
+                .expect("make OpenGL context current");
+
+            let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+            self.gl.clear_color(0.0, 0.0, 0.0, progress);
+            self.gl.clear(GL::COLOR_BUFFER_BIT);
 
             self.gl
                 .bind_framebuffer(GL::FRAMEBUFFER, Some(self.dxgi_interop.fbo));
@@ -82,36 +141,8 @@ impl Instance {
                 &mut self.dxgi_interop.color_handle_gl as *mut _,
             );
 
-            let _ = self.dxgi_interop.swap_chain.Present(0, 0);
+            let _ = self.dxgi_interop.swap_chain.Present(1, 0);
         }
-
-        // self.gl_surface
-        //     .swap_buffers(&self.gl_context)
-        //     .expect("swap OpenGL buffers");
-
-        // unsafe {
-        //     windows::Win32::Graphics::Dwm::DwmFlush();
-        // }
-    }
-
-    pub fn fade_to_black(&mut self, timestamp: f64) {
-        self.gl_context
-            .make_current(&self.gl_surface)
-            .expect("make OpenGL context current");
-
-        let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
-        unsafe {
-            self.gl.clear_color(0.0, 0.0, 0.0, progress);
-            self.gl.clear(GL::COLOR_BUFFER_BIT);
-        }
-
-        // self.gl_surface
-        //     .swap_buffers(&self.gl_context)
-        //     .expect("swap OpenGL buffers");
-
-        // unsafe {
-        //     windows::Win32::Graphics::Dwm::DwmFlush();
-        // }
     }
 }
 
@@ -164,7 +195,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
 
         if let Ok(log_file) = maybe_log_file {
             loggers.push(WriteLogger::new(
-                LevelFilter::Debug,
+                LevelFilter::Warn,
                 Config::default(),
                 log_file,
             ));
@@ -277,7 +308,10 @@ fn run_main_loop(
                     ..
                 }
                 | Event::KeyDown { .. }
-                | Event::MouseButtonDown { .. } => break 'main,
+                | Event::MouseButtonDown { .. } => {
+                    log::debug!("EVENT");
+                    break 'main;
+                }
 
                 Event::MouseMotion { xrel, yrel, .. } => {
                     if f64::max(xrel.abs() as f64, yrel.abs() as f64)
@@ -294,11 +328,11 @@ fn run_main_loop(
         for (_, instance) in instances.iter_mut() {
             let timestamp = start.elapsed().as_secs_f64() * 1000.0;
 
-            // if timestamp < FADE_TO_BLACK_DURATION {
-            //     instance.fade_to_black(timestamp);
-            // } else {
-            instance.draw(timestamp);
-            // }
+            if timestamp < FADE_TO_BLACK_DURATION {
+                instance.fade_to_black(timestamp);
+            } else {
+                instance.draw(timestamp);
+            }
         }
     }
 
@@ -354,6 +388,7 @@ fn new_preview_window(
         window.raw_display_handle(),
         raw_window_handle,
         inner_size,
+        None,
         Some(window.raw_window_handle()),
     );
 
@@ -380,6 +415,7 @@ fn new_preview_window(
         gl_context,
         gl_surface,
         gl: Rc::clone(&glow_context),
+        gl_window: None,
         window,
         dxgi_interop,
     })
@@ -403,10 +439,18 @@ fn new_instance(
 
     unsafe { enable_transparency(&window.raw_window_handle()) };
 
+    let hidden_window = video_subsystem
+        .window("GL Context Window", 1, 1)
+        .hidden()
+        .opengl()
+        .build()
+        .map_err(|err| err.to_string())?;
+
     let (gl_context, gl_surface, glow_context, dxgi_interop) = new_gl_context(
         window.raw_display_handle(),
         window.raw_window_handle(),
         window.size().into(),
+        Some(hidden_window.raw_window_handle()),
         None,
     );
 
@@ -428,6 +472,7 @@ fn new_instance(
         gl_context,
         gl_surface,
         gl: Rc::clone(&glow_context),
+        gl_window: Some(hidden_window),
         window,
         dxgi_interop,
     })
@@ -444,9 +489,10 @@ fn new_instance(
 /// This code has been modified from glutin-winit and only supports WGL (Windows).
 fn new_gl_context(
     raw_display_handle: RawDisplayHandle,
-    raw_window_handle: RawWindowHandle,
+    actual_raw_window_handle: RawWindowHandle,
     inner_size: PhysicalSize<u32>,
 
+    hidden_window: Option<RawWindowHandle>,
     // A hack to create the gl_display using the invisible event window
     // we create for the preview.
     attr_window: Option<RawWindowHandle>,
@@ -456,6 +502,10 @@ fn new_gl_context(
     Rc<glow::Context>,
     DXGIInterop,
 ) {
+    use glutin::config::ConfigSurfaceTypes;
+
+    let raw_window_handle = hidden_window.unwrap();
+
     let template = ConfigTemplateBuilder::new()
         .with_buffer_type(glutin::config::ColorBufferType::Rgb {
             r_size: 8,
@@ -465,6 +515,7 @@ fn new_gl_context(
         .with_alpha_size(8)
         .with_transparency(true)
         .compatible_with_native_window(raw_window_handle)
+        // .with_surface_type(ConfigSurfaceTypes::empty())
         .build();
 
     // Only WGL requires a window to create a full-fledged OpenGL context
@@ -508,7 +559,6 @@ fn new_gl_context(
     // Request the minimum required OpenGL version for Flux
     let context_attributes = ContextAttributesBuilder::new()
         .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
-        // .build(None);
         .build(Some(raw_window_handle));
 
     // Fallback to GLES 3.0 (aka WebGL 2.0)
@@ -529,10 +579,12 @@ fn new_gl_context(
     let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
     let attrs =
         SurfaceAttributesBuilder::<WindowSurface>::new().build(raw_window_handle, width, height);
+    // ContextAttributesBuilder::new().build(Some(raw_window_handle));
 
     let gl_surface = unsafe {
         gl_config
             .display()
+            // .create_context(&gl_config, &attrs)
             .create_window_surface(&gl_config, &attrs)
             .unwrap()
     };
@@ -541,11 +593,11 @@ fn new_gl_context(
     let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
 
     // Try setting vsync.
-    if let Err(res) =
-        gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-    {
-        log::error!("Failed to set vsync: {res:?}");
-    }
+    // if let Err(res) =
+    //     gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
+    // {
+    //     log::error!("Failed to set vsync: {res:?}");
+    // }
 
     let glow_context = unsafe {
         glow::Context::from_loader_function(|s| {
@@ -561,7 +613,12 @@ fn new_gl_context(
     // };
 
     log::debug!("Creating DXGI swapchain");
-    let dxgi_interop = create_dxgi_swapchain(&raw_window_handle, &glow_context);
+    let dxgi_interop = create_dxgi_swapchain(
+        &actual_raw_window_handle,
+        &glow_context,
+        width.into(),
+        height.into(),
+    );
     log::debug!("Created DXGI swapchain");
 
     // Set common GL state
@@ -721,23 +778,33 @@ impl fmt::Display for HumanConfig {
 }
 
 // https://github.com/Osspial/render_to_dxgi/blob/master/src/main.rs
-fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context) -> DXGIInterop {
+// https://github.com/nlguillemot/OpenGL-on-DXGI/blob/master/main.cpp
+fn create_dxgi_swapchain(
+    raw_window_handle: &RawWindowHandle,
+    gl: &glow::Context,
+    width: u32,
+    height: u32,
+) -> DXGIInterop {
     use windows::core::*;
     use windows::Win32::Graphics::Direct3D::{
         D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_11_0,
     };
     use windows::Win32::Graphics::Direct3D11::{
         D3D11CreateDevice, D3D11CreateDeviceAndSwapChain, ID3D11Device, ID3D11DeviceContext,
-        ID3D11RenderTargetView, ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION,
+        ID3D11RenderTargetView, ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG,
+        D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
+        D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_SDK_VERSION,
     };
     use windows::Win32::Graphics::Dxgi::Common::{
-        DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_MODE_SCALING_UNSPECIFIED,
-        DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_SAMPLE_DESC,
+        DXGI_FORMAT, DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_FORMAT_R8G8B8A8_UNORM_SRGB, DXGI_MODE_DESC,
+        DXGI_MODE_SCALING_UNSPECIFIED, DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED, DXGI_SAMPLE_DESC,
     };
     use windows::Win32::Graphics::Dxgi::{
         CreateDXGIFactory2, IDXGIFactory2, IDXGISwapChain, IDXGISwapChain2, DXGI_SWAP_CHAIN_DESC,
-        DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT,
-        DXGI_SWAP_EFFECT_DISCARD, DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
+        DXGI_SWAP_CHAIN_DESC1, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
+        DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, DXGI_SWAP_EFFECT_DISCARD,
+        DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL, DXGI_USAGE_BACK_BUFFER,
+        DXGI_USAGE_RENDER_TARGET_OUTPUT, DXGI_USAGE_UNORDERED_ACCESS,
     };
 
     let win32_handle = match raw_window_handle {
@@ -750,67 +817,44 @@ fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context
     let mut p_device: Option<ID3D11Device> = None;
     let mut p_context: Option<ID3D11DeviceContext> = None;
     let mut p_swap_chain: Option<IDXGISwapChain> = None;
-    // let mut p_swap_chain: Option<IDXGISwapChain2> = None;
 
     unsafe {
-        // D3D11CreateDevice(
-        //     None,
-        //     D3D_DRIVER_TYPE_HARDWARE,
-        //     None,
-        //     D3D11_CREATE_DEVICE_FLAG(0),
-        //     None,
-        //     D3D11_SDK_VERSION,
-        //     Some(&mut p_device),
-        //     None,
-        //     Some(&mut p_context),
-        // )
-        // .unwrap();
-        //
-        // let factory = CreateDXGIFactory2::<IDXGIFactory2>(0).unwrap();
-        //
-        // let props = DXGI_SWAP_CHAIN_DESC1 {
-        //     BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-        //     BufferCount: 2,
-        //     SampleDesc: DXGI_SAMPLE_DESC {
-        //         Count: 1,
-        //         Quality: 0,
-        //     },
-        //     SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
-        //     Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
-        //     ..Default::default()
-        // };
-        //
-        // let sw = p_device.clone().unwrap();
-        // let swap_chain_1 = factory
-        //     .CreateSwapChainForHwnd(&sw, hwnd, &props, None, None)
-        //     .unwrap();
-        //
-        // p_swap_chain = swap_chain_1.cast().ok();
-
         D3D11CreateDeviceAndSwapChain(
             None,
             D3D_DRIVER_TYPE_HARDWARE,
             None,
-            D3D11_CREATE_DEVICE_FLAG(0), // | D3D11_CREATE_DEVICE_DEBUG,
-            None,                        // Some(&[D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_11_0]),
+            D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS
+                | D3D11_CREATE_DEVICE_FLAG(0)
+                | D3D11_CREATE_DEVICE_SINGLETHREADED,
+            // D3D11_CREATE_DEVICE_FLAG(0), // | D3D11_CREATE_DEVICE_DEBUG,
+            // Some(&[D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_11_0]),
+            Some(&[D3D_FEATURE_LEVEL_11_0]),
+            // None,
             D3D11_SDK_VERSION,
             Some(&DXGI_SWAP_CHAIN_DESC {
                 BufferDesc: DXGI_MODE_DESC {
                     Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+                    // Format: DXGI_FORMAT_B8G8R8A8_UNORM,
+                    // Format: DXGI_FORMAT_B8G8R8A8_UNORM,
                     // ScanlineOrdering: DXGI_MODE_SCANLINE_ORDER_UNSPECIFIED,
                     // Scaling: DXGI_MODE_SCALING_UNSPECIFIED,
                     ..Default::default()
                 },
                 BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                BufferCount: 1,
+                // | DXGI_USAGE_BACK_BUFFER
+                // | DXGI_USAGE_UNORDERED_ACCESS,
+                BufferCount: 2,
                 OutputWindow: hwnd,
                 Windowed: true.into(),
-                SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
+                SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
+                // SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
                 SampleDesc: DXGI_SAMPLE_DESC {
                     Count: 1,
-                    ..Default::default()
+                    Quality: 0,
                 },
                 // Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
+                Flags: (DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0
+                    | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0) as u32,
                 ..Default::default()
             }),
             Some(&mut p_swap_chain),
@@ -823,11 +867,13 @@ fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context
 
     let swap_chain = p_swap_chain.expect("failed to created swapchain");
     let context = p_context.expect("failed to create immediate context");
-    let mut device = p_device.clone().expect("failed to create device");
+    let device = p_device.clone().expect("failed to create device");
 
     log::debug!("Created device, context, and swapchain");
 
-    // let frame_latency_waitable_object = unsafe { swap_chain.GetFrameLatencyWaitableObject() };
+    let swap_chain_2: IDXGISwapChain2 = swap_chain.cast().expect("failed to cast the SwapChain");
+
+    let frame_latency_waitable_object = unsafe { swap_chain_2.GetFrameLatencyWaitableObject() };
 
     use std::borrow::Cow;
     use std::ffi::CStr;
@@ -853,6 +899,9 @@ fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context
         for extension in extensions.split(' ') {
             if extension == "WGL_NV_DX_interop" {
                 log::debug!("Found WGL_NV_DX_interop");
+            }
+            if extension == "WGL_NV_DX_interop2" {
+                log::debug!("Found WGL_NV_DX_interop2");
             }
         }
 
@@ -888,17 +937,27 @@ fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context
 
     unsafe {
         let gl_handle_d3d = (dx_interop.DXOpenDeviceNV)(device.as_raw());
-        log::debug!("Opened interop device");
+        if gl_handle_d3d.is_invalid() {
+            log::error!("Failed to open the GL DX interop device");
+        } else {
+            log::debug!("Opened interop device");
+        }
 
-        let mut color_buffer: ID3D11Texture2D = swap_chain.GetBuffer(0).unwrap();
+        let mut color_buffer: ID3D11Texture2D = swap_chain_2.GetBuffer(0).unwrap();
         let mut color_buffer_view: Option<ID3D11RenderTargetView> = None;
+
+        // let desc = D3D11_RENDER_TARGET_VIEW_DESC {
+        //     Format: DXGI_FORMAT_R8G8B8A8_UNORM,
+        //     Usage: D3D11_USAGE_DEFAULT,
+        //     ..Default::default()
+        // };
 
         device
             .CreateRenderTargetView(&color_buffer, None, Some(&mut color_buffer_view))
             .unwrap();
 
         context.OMSetRenderTargets(Some(&[color_buffer_view.clone()]), None);
-        let clear_color: [f32; 4] = [0.0, 0.0, 0.0, 1.0];
+        let clear_color: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
         context.ClearRenderTargetView(
             color_buffer_view.as_ref().unwrap(),
             &clear_color as *const _,
@@ -907,35 +966,84 @@ fn create_dxgi_swapchain(raw_window_handle: &RawWindowHandle, gl: &glow::Context
 
         let rbo = gl.create_renderbuffer().unwrap();
         let fbo = gl.create_framebuffer().unwrap();
+        let texture = gl.create_texture().unwrap();
 
-        log::debug!("Created GL render and frame buffers");
+        // I don't think this is necessary, at least according to the khronos example
+        // gl.bind_renderbuffer(GL::RENDERBUFFER, Some(rbo));
+        // gl.renderbuffer_storage(GL::RENDERBUFFER, GL::RGBA8, width as i32, height as i32);
+        // gl.bind_renderbuffer(GL::RENDERBUFFER, None);
+
+        log::debug!("Created GL renderbuffer");
 
         const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
+        const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
+        // let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
+        //     gl_handle_d3d,
+        //     color_buffer.as_raw(),
+        //     rbo.0.into(),
+        //     GL::RENDERBUFFER,
+        //     WGL_ACCESS_READ_WRITE_DISCARD_NV,
+        // );
+
+        // According to my testing, AMD graphics cards don't support sharig renderbuffers.
         let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
             gl_handle_d3d,
             color_buffer.as_raw(),
-            rbo.0.into(),
-            GL::RENDERBUFFER,
-            WGL_ACCESS_READ_WRITE_NV,
+            texture.0.into(),
+            GL::TEXTURE_2D,
+            WGL_ACCESS_READ_WRITE_DISCARD_NV,
         );
-        log::debug!("Registered color buffer");
 
+        if color_handle_gl.is_invalid() {
+            log::error!("Failed to register color buffer handle");
+        } else {
+            log::debug!("Registered color buffer");
+        }
+
+        // Bind the texture to the framebuffer
         gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
-        gl.framebuffer_renderbuffer(
+        gl.framebuffer_texture_2d(
             GL::FRAMEBUFFER,
             GL::COLOR_ATTACHMENT0,
-            GL::RENDERBUFFER,
-            Some(rbo),
+            GL::TEXTURE_2D,
+            Some(texture),
+            0,
         );
+
+        // gl.viewport(0, 0, width as i32, height as i32);
+        // gl.bind_renderbuffer(GL::RENDERBUFFER, Some(rbo));
+        // gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
+        // gl.framebuffer_renderbuffer(
+        //     GL::FRAMEBUFFER,
+        //     GL::COLOR_ATTACHMENT0,
+        //     GL::RENDERBUFFER,
+        //     Some(rbo),
+        // );
+        log::debug!("Created GL framebuffer");
+
+        match gl.check_framebuffer_status(GL::FRAMEBUFFER) {
+            GL::FRAMEBUFFER_INCOMPLETE_ATTACHMENT => {
+                log::error!("FRAMEBUFFER_INCOMPLETE_ATTACHMENT")
+            }
+            GL::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT => {
+                log::error!("FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT")
+            }
+            GL::FRAMEBUFFER_COMPLETE => {
+                log::debug!("FRAMEBUFFER_COMPLETE");
+            }
+            other => log::debug!("Framebuffer status: {:#x}", other),
+        }
+
+        gl.bind_framebuffer(GL::FRAMEBUFFER, None);
 
         DXGIInterop {
             device,
             context,
-            swap_chain,
+            swap_chain: swap_chain_2,
             gl_handle_d3d,
             dx_interop,
             color_handle_gl,
-            // frame_latency_waitable_object,
+            frame_latency_waitable_object,
             fbo,
             rbo,
         }
@@ -950,12 +1058,12 @@ use windows::Win32::Graphics::Dxgi::{IDXGISwapChain, IDXGISwapChain2};
 struct DXGIInterop {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
-    swap_chain: IDXGISwapChain,
-    // swap_chain: IDXGISwapChain2,
+    // swap_chain: IDXGISwapChain,
+    swap_chain: IDXGISwapChain2,
     gl_handle_d3d: HANDLE,
     dx_interop: WGLDXInteropExtensionFunctions,
     color_handle_gl: HANDLE,
-    // frame_latency_waitable_object: HANDLE,
+    frame_latency_waitable_object: HANDLE,
     fbo: GL::NativeFramebuffer,
     rbo: GL::NativeRenderbuffer,
 }
