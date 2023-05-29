@@ -133,6 +133,7 @@ impl Instance {
             self.flux.render();
 
             self.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+
             self.gl.finish();
 
             (self.dxgi_interop.dx_interop.DXUnlockObjectsNV)(
@@ -309,7 +310,6 @@ fn run_main_loop(
                 }
                 | Event::KeyDown { .. }
                 | Event::MouseButtonDown { .. } => {
-                    log::debug!("EVENT");
                     break 'main;
                 }
 
@@ -985,7 +985,7 @@ fn create_dxgi_swapchain(
         //     WGL_ACCESS_READ_WRITE_DISCARD_NV,
         // );
 
-        // According to my testing, AMD graphics cards don't support sharig renderbuffers.
+        // According to my testing, AMD graphics cards don't support sharing renderbuffers.
         let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
             gl_handle_d3d,
             color_buffer.as_raw(),
@@ -1050,10 +1050,11 @@ fn create_dxgi_swapchain(
     }
 }
 
+use windows::Win32::Graphics::Direct3D11::ID3D11RenderTargetView;
 use windows::Win32::Graphics::Direct3D11::{
     ID3D11Device, ID3D11DeviceContext, D3D11_CREATE_DEVICE_DEBUG,
 };
-use windows::Win32::Graphics::Dxgi::{IDXGISwapChain, IDXGISwapChain2};
+use windows::Win32::Graphics::Dxgi::IDXGISwapChain2;
 
 struct DXGIInterop {
     device: ID3D11Device,
