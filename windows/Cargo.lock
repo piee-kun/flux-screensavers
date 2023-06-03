@@ -772,13 +772,13 @@ dependencies = [
 
 [[package]]
 name = "flux"
-version = "4.4.0"
-source = "git+https://github.com/sandydoo/flux?branch=main#8c064670a60726acebe82dfe36465aaae69c18ef"
+version = "4.5.0"
+source = "git+https://github.com/sandydoo/flux?branch=main#09c45ee7ecf243cba0e481bf12a7e74d53bb731d"
 dependencies = [
  "bytemuck",
  "crevice",
  "getrandom",
- "glow",
+ "glow 0.12.2",
  "half",
  "image",
  "log",
@@ -798,7 +798,7 @@ version = "1.4.0"
 dependencies = [
  "directories",
  "flux",
- "glow",
+ "glow 0.12.2",
  "glutin 0.30.6",
  "iced",
  "log",
@@ -1088,13 +1088,25 @@ dependencies = [
 ]
 
 [[package]]
+name = "glow"
+version = "0.12.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "807edf58b70c0b5b2181dd39fe1839dbdb3ba02645630dc5f753e23da307f762"
+dependencies = [
+ "js-sys",
+ "slotmap",
+ "wasm-bindgen",
+ "web-sys",
+]
+
+[[package]]
 name = "glow_glyph"
 version = "0.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f4e62c64947b9a24fe20e2bba9ad819ecb506ef5c8df7ffc4737464c6df9510"
 dependencies = [
  "bytemuck",
- "glow",
+ "glow 0.11.2",
  "glyph_brush",
  "log",
 ]
@@ -1373,7 +1385,7 @@ checksum = "95755f62fec2ec2c8f8bc2c0be5072b1d0dfed8db250686059ddcce5da530acf"
 dependencies = [
  "bytemuck",
  "euclid",
- "glow",
+ "glow 0.11.2",
  "glow_glyph",
  "glyph_brush",
  "iced_graphics",
@@ -3337,7 +3349,7 @@ dependencies = [
  "d3d12",
  "foreign-types 0.3.2",
  "fxhash",
- "glow",
+ "glow 0.11.2",
  "gpu-alloc",
  "gpu-descriptor",
  "js-sys",

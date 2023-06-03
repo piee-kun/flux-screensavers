@@ -9,6 +9,7 @@ fn main() {
     }
 
     // Skip windres in development.
+    #[cfg(windows)]
     if env("PROFILE") == "release" {
         let mut resource = winres::WindowsResource::new();
 
