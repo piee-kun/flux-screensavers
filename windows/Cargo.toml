@@ -24,7 +24,7 @@ panic = "abort" # Strip expensive panic unwinding code
 strip = true # Remove debug symbols
 
 [dependencies]
-directories = "4"
+directories = "5"
 glow = "0.12.2"
 log = { version = "0.4", features = ["serde"] }
 log-panics = { version = "2", features = ["with-backtrace"]}
@@ -55,7 +55,7 @@ default-features = false
 features = ["egl", "wgl"]
 
 [dependencies.iced]
-version = "0.7"
+version = "0.9"
 default-features = false
 features = [
    # Use system fonts
