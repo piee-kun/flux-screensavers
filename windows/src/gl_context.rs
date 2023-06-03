@@ -20,7 +20,6 @@ pub struct GLContext {
     pub context: PossiblyCurrentContext,
     pub surface: Surface<WindowSurface>,
     pub gl: Rc<glow::Context>,
-    pub window: Option<Window>,
 }
 
 /// Create an OpenGL context, surface, and initialize the glow API.
@@ -34,7 +33,6 @@ pub struct GLContext {
 /// This code has been modified from glutin-winit and only supports WGL (Windows).
 pub(crate) fn new_gl_context(
     raw_display_handle: RawDisplayHandle,
-    actual_raw_window_handle: RawWindowHandle,
     inner_size: PhysicalSize<u32>,
 
     hidden_window: Option<RawWindowHandle>,
@@ -113,7 +111,7 @@ pub(crate) fn new_gl_context(
             })
     };
 
-    let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
+    let (width, height) = inner_size.non_zero().expect("non-zero window size");
     let attrs =
         SurfaceAttributesBuilder::<WindowSurface>::new().build(raw_window_handle, width, height);
 
@@ -129,7 +127,7 @@ pub(crate) fn new_gl_context(
 
     let glow_context = unsafe {
         glow::Context::from_loader_function(|s| {
-            gl_display.get_proc_address(&CString::new(s).unwrap().as_c_str()) as *const _
+            gl_display.get_proc_address(CString::new(s).unwrap().as_c_str()) as *const _
         })
     };
     log::debug!("{:?}", glow_context.version());
@@ -143,7 +141,6 @@ pub(crate) fn new_gl_context(
         context: gl_context,
         surface: gl_surface,
         gl: Rc::new(glow_context),
-        window: None,
     }
 }
 

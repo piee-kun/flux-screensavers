@@ -36,12 +36,14 @@ pub(crate) struct DXGIInterop {
     color_handle_gl: HANDLE,
     frame_latency_waitable_object: HANDLE,
     fbo: GL::NativeFramebuffer,
-    rbo: GL::NativeRenderbuffer,
 }
 
 type GLint = c_int;
 type GLenum = c_uint;
 type GLuint = c_uint;
+
+// const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
+const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
 
 #[allow(non_snake_case)]
 pub(crate) struct WGLDXInteropExtensionFunctions {
@@ -138,7 +140,6 @@ pub(crate) fn create_dxgi_swapchain(
                 // Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
                 Flags: (DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0
                     | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0) as u32,
-                ..Default::default()
             }),
             Some(&mut p_swap_chain),
             Some(&mut p_device),
@@ -150,7 +151,7 @@ pub(crate) fn create_dxgi_swapchain(
 
     let swap_chain = p_swap_chain.expect("failed to created swapchain");
     let context = p_context.expect("failed to create immediate context");
-    let device = p_device.clone().expect("failed to create device");
+    let device = p_device.expect("failed to create device");
 
     log::debug!("Created device, context, and swapchain");
 
@@ -184,9 +185,6 @@ pub(crate) fn create_dxgi_swapchain(
 
         log::debug!("Extensions: {}", extensions);
     }
-
-    // const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
-    const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
 
     let dx_interop = unsafe {
         WGLDXInteropExtensionFunctions {
@@ -239,9 +237,6 @@ pub(crate) fn create_dxgi_swapchain(
         log::debug!("Cleared render target view");
 
         let fbo = gl.create_framebuffer().unwrap();
-
-        log::debug!("Created GL renderbuffer");
-
         let rbo = gl.create_renderbuffer().unwrap();
 
         let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
@@ -305,7 +300,7 @@ pub(crate) fn create_dxgi_swapchain(
             GL::FRAMEBUFFER_COMPLETE => {
                 log::debug!("DXGI Framebuffer: complete");
             }
-            other => log::debug!("DXGI Framebuffer: {:#x}", other),
+            other => log::error!("DXGI Framebuffer: {:#x}", other),
         }
 
         gl.bind_framebuffer(GL::FRAMEBUFFER, None);
@@ -319,7 +314,6 @@ pub(crate) fn create_dxgi_swapchain(
             color_handle_gl,
             frame_latency_waitable_object,
             fbo,
-            rbo,
         }
     }
 }

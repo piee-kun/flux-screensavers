@@ -54,6 +54,7 @@ struct Instance {
     window: Window,
 
     gl_context: gl_context::GLContext,
+    gl_window: Option<Window>,
 
     // DXGI swapchain
     #[cfg(windows)]
@@ -352,11 +353,21 @@ fn new_preview_window(
 
     let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
-        raw_window_handle,
         inner_size,
         None,
         Some(window.raw_window_handle()),
     );
+
+    #[cfg(windows)]
+    let dxgi_interop = {
+        log::debug!("Creating DXGI swapchain");
+        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
+            &raw_window_handle,
+            &gl_context.gl,
+        );
+        log::debug!("Created DXGI swapchain");
+        dxgi_interop
+    };
 
     let wallpaper = window
         .current_monitor()
@@ -377,28 +388,21 @@ fn new_preview_window(
     .map_err(|err| err.to_string())?;
 
     #[cfg(windows)]
-    {
-        log::debug!("Creating DXGI swapchain");
-        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
-            &raw_window_handle,
-            &gl_context.gl,
-        );
-        log::debug!("Created DXGI swapchain");
-
-        Ok(Instance {
-            flux,
-            gl_context,
-            window,
-            dxgi_interop,
-        })
-    }
-
-    #[cfg(not(windows))]
-    Ok(Instance {
+    return Ok(Instance {
         flux,
         gl_context,
+        gl_window: None,
         window,
-    })
+        dxgi_interop,
+    });
+
+    #[cfg(not(windows))]
+    return Ok(Instance {
+        flux,
+        gl_context,
+        gl_window: None,
+        window,
+    });
 }
 
 fn new_instance(
@@ -431,11 +435,21 @@ fn new_instance(
 
     let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
-        window.raw_window_handle(),
         window.size().into(),
         Some(hidden_window.raw_window_handle()),
         None,
     );
+
+    #[cfg(windows)]
+    let dxgi_interop = {
+        log::debug!("Creating DXGI swapchain");
+        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
+            &window.raw_window_handle(),
+            &gl_context.gl,
+        );
+        log::debug!("Created DXGI swapchain");
+        dxgi_interop
+    };
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
@@ -451,26 +465,19 @@ fn new_instance(
     .map_err(|err| err.to_string())?;
 
     #[cfg(windows)]
-    {
-        log::debug!("Creating DXGI swapchain");
-        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
-            &window.raw_window_handle(),
-            &gl_context.gl,
-        );
-        log::debug!("Created DXGI swapchain");
-
-        Ok(Instance {
-            flux,
-            gl_context,
-            window,
-            dxgi_interop,
-        })
-    }
-
-    #[cfg(not(windows))]
-    Ok(Instance {
+    return Ok(Instance {
         flux,
         gl_context,
+        gl_window: Some(hidden_window),
         window,
-    })
+        dxgi_interop,
+    });
+
+    #[cfg(not(windows))]
+    return Ok(Instance {
+        flux,
+        gl_context,
+        gl_window: (hidden_window),
+        window,
+    });
 }
