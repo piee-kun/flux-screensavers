@@ -6,7 +6,6 @@ use std::rc::Rc;
 
 use raw_window_handle::{RawDisplayHandle, RawWindowHandle};
 use winit::dpi::PhysicalSize;
-use winit::window::Window;
 
 use glow as GL;
 use glow::HasContext;

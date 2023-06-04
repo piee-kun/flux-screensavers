@@ -9,19 +9,18 @@ use raw_window_handle::RawWindowHandle;
 
 use windows::core::*;
 use windows::Win32::Foundation::{BOOL, HANDLE, HWND};
-use windows::Win32::Graphics::Direct3D::{D3D_DRIVER_TYPE_HARDWARE, D3D_FEATURE_LEVEL_11_0};
+use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDeviceAndSwapChain, ID3D11Device, ID3D11DeviceContext, ID3D11RenderTargetView,
-    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG,
-    D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS,
-    D3D11_CREATE_DEVICE_SINGLETHREADED, D3D11_SDK_VERSION,
+    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Graphics::Dxgi::{
     IDXGISwapChain, IDXGISwapChain2, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
-    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, DXGI_SWAP_EFFECT_FLIP_DISCARD,
+    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, DXGI_SWAP_EFFECT_DISCARD,
+    DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
     DXGI_USAGE_RENDER_TARGET_OUTPUT,
 };
 use windows::Win32::Graphics::Gdi::HDC;
@@ -34,7 +33,7 @@ pub(crate) struct DXGIInterop {
     gl_handle_d3d: HANDLE,
     dx_interop: WGLDXInteropExtensionFunctions,
     color_handle_gl: HANDLE,
-    frame_latency_waitable_object: HANDLE,
+    // frame_latency_waitable_object: HANDLE,
     fbo: GL::NativeFramebuffer,
 }
 
@@ -45,7 +44,7 @@ type GLuint = c_uint;
 // const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
 const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
 
-#[allow(non_snake_case)]
+#[allow(non_snake_case, dead_code)]
 pub(crate) struct WGLDXInteropExtensionFunctions {
     pub(crate) DXCloseDeviceNV: unsafe extern "C" fn(hDevice: HANDLE) -> BOOL,
     pub(crate) DXLockObjectsNV:
@@ -69,8 +68,8 @@ pub(crate) unsafe fn with_dxgi_swapchain(
     dxgi_interop: &mut DXGIInterop,
     render: impl FnOnce(&GL::NativeFramebuffer),
 ) {
-    use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
-    WaitForSingleObject(dxgi_interop.frame_latency_waitable_object, INFINITE);
+    // use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
+    // WaitForSingleObject(dxgi_interop.frame_latency_waitable_object, INFINITE);
 
     (dxgi_interop.dx_interop.DXLockObjectsNV)(
         dxgi_interop.gl_handle_d3d,
@@ -78,13 +77,13 @@ pub(crate) unsafe fn with_dxgi_swapchain(
         &mut dxgi_interop.color_handle_gl as *mut _,
     );
 
+    render(&dxgi_interop.fbo);
+
     (dxgi_interop.dx_interop.DXUnlockObjectsNV)(
         dxgi_interop.gl_handle_d3d,
         1,
         &mut dxgi_interop.color_handle_gl as *mut _,
     );
-
-    render(&dxgi_interop.fbo);
 
     let _ = dxgi_interop.swap_chain.Present(1, 0);
 }
@@ -109,37 +108,34 @@ pub(crate) fn create_dxgi_swapchain(
 
     unsafe {
         D3D11CreateDeviceAndSwapChain(
-            None,
-            D3D_DRIVER_TYPE_HARDWARE,
-            None,
-            D3D11_CREATE_DEVICE_PREVENT_INTERNAL_THREADING_OPTIMIZATIONS
-                | D3D11_CREATE_DEVICE_FLAG(0)
-                | D3D11_CREATE_DEVICE_SINGLETHREADED,
-            // D3D11_CREATE_DEVICE_FLAG(0), // | D3D11_CREATE_DEVICE_DEBUG,
-            // Some(&[D3D_FEATURE_LEVEL_10_0, D3D_FEATURE_LEVEL_11_0]),
-            Some(&[D3D_FEATURE_LEVEL_11_0]),
-            // None,
-            D3D11_SDK_VERSION,
+            None,                        // Adapter
+            D3D_DRIVER_TYPE_HARDWARE,    // Driver type
+            None,                        // Software
+            D3D11_CREATE_DEVICE_FLAG(0), // Flags (do not set D3D11_CREATE_DEVICE_SINGLETHREADED)
+            None,                        // Feature levels
+            D3D11_SDK_VERSION,           // SDK version
             Some(&DXGI_SWAP_CHAIN_DESC {
                 BufferDesc: DXGI_MODE_DESC {
                     Format: DXGI_FORMAT_R8G8B8A8_UNORM,
                     ..Default::default()
                 },
                 BufferUsage: DXGI_USAGE_RENDER_TARGET_OUTPUT,
-                // | DXGI_USAGE_BACK_BUFFER
-                // | DXGI_USAGE_UNORDERED_ACCESS,
                 BufferCount: 2,
                 OutputWindow: hwnd,
                 Windowed: true.into(),
-                SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
-                // SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
+                SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
+                // FLIP modes don't work on NVIDIA cards.
+                // SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
                 SampleDesc: DXGI_SAMPLE_DESC {
+                    // Disable MSAA (also unsupported with the 'flip' model)
                     Count: 1,
                     Quality: 0,
                 },
                 // Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
-                Flags: (DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0
-                    | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0) as u32,
+                // Flags: (DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0
+                //     | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0
+                //     | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH.0) as u32,
+                ..Default::default()
             }),
             Some(&mut p_swap_chain),
             Some(&mut p_device),
@@ -154,10 +150,6 @@ pub(crate) fn create_dxgi_swapchain(
     let device = p_device.expect("failed to create device");
 
     log::debug!("Created device, context, and swapchain");
-
-    let swap_chain_2: IDXGISwapChain2 = swap_chain.cast().expect("failed to cast the SwapChain");
-
-    let frame_latency_waitable_object = unsafe { swap_chain_2.GetFrameLatencyWaitableObject() };
 
     unsafe {
         let dc = wglGetCurrentDC();
@@ -214,27 +206,33 @@ pub(crate) fn create_dxgi_swapchain(
     log::debug!("Fetched interop extension functions");
 
     unsafe {
-        let gl_handle_d3d = (dx_interop.DXOpenDeviceNV)(device.as_raw());
-        if gl_handle_d3d.is_invalid() {
-            log::error!("Failed to open the GL DX interop device");
-        } else {
-            log::debug!("Opened interop device");
-        }
-
-        let color_buffer: ID3D11Texture2D = swap_chain_2.GetBuffer(0).unwrap();
+        // Fetch the swapchain buffer
+        let color_buffer: ID3D11Texture2D = swap_chain.GetBuffer(0).unwrap();
         let mut color_buffer_view: Option<ID3D11RenderTargetView> = None;
 
+        // Create view
         device
             .CreateRenderTargetView(&color_buffer, None, Some(&mut color_buffer_view))
             .unwrap();
 
+        // Attach the back buffer to the render target for the device
         context.OMSetRenderTargets(Some(&[color_buffer_view.clone()]), None);
+
+        // Clear the back buffer
         let clear_color: [f32; 4] = [0.0, 0.0, 0.0, 0.0];
         context.ClearRenderTargetView(
             color_buffer_view.as_ref().unwrap(),
             &clear_color as *const _,
         );
         log::debug!("Cleared render target view");
+
+        // Register the D3D11 device with GL
+        let gl_handle_d3d = (dx_interop.DXOpenDeviceNV)(device.as_raw());
+        if gl_handle_d3d.is_invalid() {
+            log::error!("Failed to open the GL DX interop device");
+        } else {
+            log::debug!("Opened GL DX interop device");
+        }
 
         let fbo = gl.create_framebuffer().unwrap();
         let rbo = gl.create_renderbuffer().unwrap();
@@ -280,7 +278,6 @@ pub(crate) fn create_dxgi_swapchain(
         } else {
             log::debug!("Registed renderbuffer with DXGI");
 
-            gl.bind_renderbuffer(GL::RENDERBUFFER, Some(rbo));
             gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
             gl.framebuffer_renderbuffer(
                 GL::FRAMEBUFFER,
@@ -291,6 +288,9 @@ pub(crate) fn create_dxgi_swapchain(
         }
 
         match gl.check_framebuffer_status(GL::FRAMEBUFFER) {
+            GL::FRAMEBUFFER_UNSUPPORTED => {
+                log::error!("DXGI Framebuffer: unsupported")
+            }
             GL::FRAMEBUFFER_INCOMPLETE_ATTACHMENT => {
                 log::error!("DXGI Framebuffer: incomplete attachment")
             }
@@ -305,6 +305,10 @@ pub(crate) fn create_dxgi_swapchain(
 
         gl.bind_framebuffer(GL::FRAMEBUFFER, None);
 
+        let swap_chain_2: IDXGISwapChain2 =
+            swap_chain.cast().expect("failed to cast the SwapChain");
+        // let frame_latency_waitable_object = swap_chain_2.GetFrameLatencyWaitableObject();
+
         DXGIInterop {
             device,
             context,
@@ -312,7 +316,7 @@ pub(crate) fn create_dxgi_swapchain(
             gl_handle_d3d,
             dx_interop,
             color_handle_gl,
-            frame_latency_waitable_object,
+            // frame_latency_waitable_object,
             fbo,
         }
     }

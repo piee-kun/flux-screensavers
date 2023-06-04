@@ -412,7 +412,7 @@ fn new_instance(
 ) -> Result<Instance, String> {
     // Create the SDL window
     let window = video_subsystem
-        .window("Flux", surface.size.width, surface.size.height + 1)
+        .window("Flux", surface.size.width, surface.size.height)
         .position(surface.position.x, surface.position.y)
         .input_grabbed()
         .borderless()
