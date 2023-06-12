@@ -21,6 +21,7 @@ use std::{fs, path, process, rc::Rc};
 use glow as GL;
 use glow::HasContext;
 use glutin::context::PossiblyCurrentContextGlSurfaceAccessor;
+use glutin::prelude::GlSurface;
 
 use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawWindowHandle};
 
@@ -54,58 +55,99 @@ struct Instance {
     window: Window,
 
     gl_context: gl_context::GLContext,
+    #[allow(dead_code)]
     gl_window: Option<Window>,
 
-    // DXGI swapchain
+    swapchain: Swapchain,
+}
+
+enum Swapchain {
+    Gl,
+
     #[cfg(windows)]
-    dxgi_interop: platform::windows::dxgi_swapchain::DXGIInterop,
+    Dxgi(platform::windows::dxgi_swapchain::DXGIInterop),
 }
 
 impl Instance {
     pub fn draw(&mut self, timestamp: f64) {
-        unsafe {
-            platform::windows::dxgi_swapchain::with_dxgi_swapchain(&mut self.dxgi_interop, |fbo| {
+        match self.swapchain {
+            Swapchain::Gl => {
                 self.gl_context
                     .context
                     .make_current(&self.gl_context.surface)
                     .expect("make OpenGL context current");
 
-                self.flux.compute(timestamp);
+                self.flux.animate(timestamp);
 
-                #[cfg(windows)]
                 self.gl_context
-                    .gl
-                    .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
+                    .surface
+                    .swap_buffers(&self.gl_context.context)
+                    .expect("swap OpenGL buffers");
+            }
 
-                self.flux.render();
+            #[cfg(windows)]
+            Swapchain::Dxgi(ref mut dxgi_interop) => unsafe {
+                platform::windows::dxgi_swapchain::with_dxgi_swapchain(dxgi_interop, |fbo| {
+                    self.gl_context
+                        .context
+                        .make_current(&self.gl_context.surface)
+                        .expect("make OpenGL context current");
 
-                self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+                    self.flux.compute(timestamp);
 
-                self.gl_context.gl.finish();
-            });
+                    self.gl_context
+                        .gl
+                        .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
+
+                    self.flux.render();
+
+                    self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+                    self.gl_context.gl.finish();
+                });
+            },
         }
     }
 
     pub fn fade_to_black(&mut self, timestamp: f64) {
-        unsafe {
-            platform::windows::dxgi_swapchain::with_dxgi_swapchain(&mut self.dxgi_interop, |fbo| {
+        match self.swapchain {
+            Swapchain::Gl => {
                 self.gl_context
                     .context
                     .make_current(&self.gl_context.surface)
                     .expect("make OpenGL context current");
 
-                #[cfg(windows)]
-                self.gl_context
-                    .gl
-                    .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
-
                 let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
-                self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
-                self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
+                unsafe {
+                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
+                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
+                }
 
-                self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
-                self.gl_context.gl.finish();
-            });
+                self.gl_context
+                    .surface
+                    .swap_buffers(&self.gl_context.context)
+                    .expect("swap OpenGL buffers");
+            }
+
+            #[cfg(windows)]
+            Swapchain::Dxgi(ref mut dxgi_interop) => unsafe {
+                platform::windows::dxgi_swapchain::with_dxgi_swapchain(dxgi_interop, |fbo| {
+                    self.gl_context
+                        .context
+                        .make_current(&self.gl_context.surface)
+                        .expect("make OpenGL context current");
+
+                    self.gl_context
+                        .gl
+                        .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
+
+                    let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
+                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
+
+                    self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+                    self.gl_context.gl.finish();
+                });
+            },
         }
     }
 }
@@ -358,16 +400,7 @@ fn new_preview_window(
         Some(window.raw_window_handle()),
     );
 
-    #[cfg(windows)]
-    let dxgi_interop = {
-        log::debug!("Creating DXGI swapchain");
-        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
-            &raw_window_handle,
-            &gl_context.gl,
-        );
-        log::debug!("Created DXGI swapchain");
-        dxgi_interop
-    };
+    let swapchain = create_swapchain(&raw_window_handle, &gl_context);
 
     let wallpaper = window
         .current_monitor()
@@ -387,22 +420,13 @@ fn new_preview_window(
     )
     .map_err(|err| err.to_string())?;
 
-    #[cfg(windows)]
-    return Ok(Instance {
+    Ok(Instance {
         flux,
         gl_context,
         gl_window: None,
         window,
-        dxgi_interop,
-    });
-
-    #[cfg(not(windows))]
-    return Ok(Instance {
-        flux,
-        gl_context,
-        gl_window: None,
-        window,
-    });
+        swapchain,
+    })
 }
 
 fn new_instance(
@@ -437,19 +461,11 @@ fn new_instance(
         window.raw_display_handle(),
         window.size().into(),
         Some(hidden_window.raw_window_handle()),
+        // Some(window.raw_window_handle()),
         None,
     );
 
-    #[cfg(windows)]
-    let dxgi_interop = {
-        log::debug!("Creating DXGI swapchain");
-        let dxgi_interop = platform::windows::dxgi_swapchain::create_dxgi_swapchain(
-            &window.raw_window_handle(),
-            &gl_context.gl,
-        );
-        log::debug!("Created DXGI swapchain");
-        dxgi_interop
-    };
+    let swapchain = create_swapchain(&window.raw_window_handle(), &gl_context);
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
@@ -464,20 +480,49 @@ fn new_instance(
     )
     .map_err(|err| err.to_string())?;
 
-    #[cfg(windows)]
-    return Ok(Instance {
+    Ok(Instance {
         flux,
         gl_context,
         gl_window: Some(hidden_window),
+        // gl_window: None,
         window,
-        dxgi_interop,
-    });
+        swapchain,
+    })
+}
 
-    #[cfg(not(windows))]
-    return Ok(Instance {
-        flux,
-        gl_context,
-        gl_window: (hidden_window),
-        window,
-    });
+#[cfg(not(windows))]
+fn create_swapchain(
+    raw_window_handle: &RawWindowHandle,
+    gl_context: &gl_context::GLContext,
+) -> Swapchain {
+    Swapchain::Gl
+}
+
+#[cfg(windows)]
+fn create_swapchain(
+    raw_window_handle: &RawWindowHandle,
+    gl_context: &gl_context::GLContext,
+) -> Swapchain {
+    let dxgi_interop =
+        platform::windows::dxgi_swapchain::create_dxgi_swapchain(raw_window_handle, &gl_context.gl);
+
+    match dxgi_interop {
+        Ok(dxgi_interop) => Swapchain::Dxgi(dxgi_interop),
+        Err(err) => {
+            use glutin::surface::SwapInterval;
+            use std::num::NonZeroU32;
+
+            log::warn!("Failed to create DXGI swapchain: {}", err);
+
+            // Try setting vsync.
+            if let Err(res) = gl_context.surface.set_swap_interval(
+                &gl_context.context,
+                SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            ) {
+                log::error!("Failed to set vsync: {res:?}");
+            }
+
+            Swapchain::Gl
+        }
+    }
 }

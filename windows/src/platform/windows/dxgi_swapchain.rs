@@ -1,5 +1,6 @@
 use std::borrow::Cow;
 use std::ffi::CStr;
+use std::fmt;
 use std::mem;
 use std::os::raw::{c_char, c_int, c_uint, c_void};
 
@@ -7,12 +8,13 @@ use glow as GL;
 use glow::HasContext;
 use raw_window_handle::RawWindowHandle;
 
-use windows::core::*;
+use windows::core::{ComInterface, Interface, PCSTR};
 use windows::Win32::Foundation::{BOOL, HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDeviceAndSwapChain, ID3D11Device, ID3D11DeviceContext, ID3D11RenderTargetView,
-    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION,
+    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_MAX_DEPTH, D3D11_MIN_DEPTH, D3D11_SDK_VERSION,
+    D3D11_VIEWPORT,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC,
@@ -26,10 +28,36 @@ use windows::Win32::Graphics::Dxgi::{
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::OpenGL::{wglGetCurrentDC, wglGetProcAddress};
 
+#[derive(Debug)]
+pub(crate) enum Problem {
+    Unsupported,
+    Failure(String),
+}
+
+impl From<&str> for Problem {
+    fn from(s: &str) -> Self {
+        Problem::Failure(s.to_owned())
+    }
+}
+impl From<String> for Problem {
+    fn from(s: String) -> Self {
+        Problem::Failure(s)
+    }
+}
+
+impl fmt::Display for Problem {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Problem::Unsupported => write!(f, "Unsupported"),
+            Problem::Failure(s) => write!(f, "{}", s),
+        }
+    }
+}
+
 pub(crate) struct DXGIInterop {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
-    swap_chain: IDXGISwapChain2,
+    swap_chain: IDXGISwapChain,
     gl_handle_d3d: HANDLE,
     dx_interop: WGLDXInteropExtensionFunctions,
     color_handle_gl: HANDLE,
@@ -41,7 +69,7 @@ type GLint = c_int;
 type GLenum = c_uint;
 type GLuint = c_uint;
 
-// const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
+const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
 const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
 
 #[allow(non_snake_case, dead_code)]
@@ -94,10 +122,10 @@ pub(crate) unsafe fn with_dxgi_swapchain(
 pub(crate) fn create_dxgi_swapchain(
     raw_window_handle: &RawWindowHandle,
     gl: &glow::Context,
-) -> DXGIInterop {
+) -> Result<DXGIInterop, Problem> {
     let win32_handle = match raw_window_handle {
         RawWindowHandle::Win32(handle) => handle,
-        _ => panic!("This platform is not supported yet"),
+        _ => return Err("Only Win32 handles can be used to create a DXGI swapchain".into()),
     };
 
     let hwnd = HWND(win32_handle.hwnd as _);
@@ -142,7 +170,7 @@ pub(crate) fn create_dxgi_swapchain(
             None,
             Some(&mut p_context),
         )
-        .expect("Failed to create DXGI device and swapchain");
+        .map_err(|_| "Failed to create DXGI device and swapchain")?;
     }
 
     let swap_chain = p_swap_chain.expect("failed to created swapchain");
@@ -150,6 +178,8 @@ pub(crate) fn create_dxgi_swapchain(
     let device = p_device.expect("failed to create device");
 
     log::debug!("Created device, context, and swapchain");
+
+    log::debug!("Fetching WGL extensions");
 
     unsafe {
         let dc = wglGetCurrentDC();
@@ -165,17 +195,12 @@ pub(crate) fn create_dxgi_swapchain(
             None => Cow::Borrowed(""),
         };
 
-        // Load function pointers.
-        for extension in extensions.split(' ') {
-            if extension == "WGL_NV_DX_interop" {
-                log::debug!("Found WGL_NV_DX_interop");
-            }
-            if extension == "WGL_NV_DX_interop2" {
-                log::debug!("Found WGL_NV_DX_interop2");
-            }
-        }
+        log::debug!("Supported extensions: {}", extensions);
 
-        log::debug!("Extensions: {}", extensions);
+        // Check if WGL_NV_DX_interop2 is supported
+        if !extensions.contains("WGL_NV_DX_interop2") {
+            return Err(Problem::Unsupported);
+        }
     }
 
     let dx_interop = unsafe {
@@ -229,15 +254,15 @@ pub(crate) fn create_dxgi_swapchain(
         // Register the D3D11 device with GL
         let gl_handle_d3d = (dx_interop.DXOpenDeviceNV)(device.as_raw());
         if gl_handle_d3d.is_invalid() {
-            log::error!("Failed to open the GL DX interop device");
-        } else {
-            log::debug!("Opened GL DX interop device");
+            return Err("Failed to open the GL DX interop device".into());
         }
+
+        log::debug!("Opened GL DX interop device");
 
         let fbo = gl.create_framebuffer().unwrap();
         let rbo = gl.create_renderbuffer().unwrap();
 
-        let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
+        let mut color_handle_gl = (dx_interop.DXRegisterObjectNV)(
             gl_handle_d3d,
             color_buffer.as_raw(),
             rbo.0.into(),
@@ -246,13 +271,13 @@ pub(crate) fn create_dxgi_swapchain(
         );
 
         if color_handle_gl.is_invalid() {
-            log::error!("Failed to register a renderbuffer with DXGI. Falling back to a texture.");
+            log::warn!("Failed to register a renderbuffer with DXGI. Falling back to a texture.");
 
             gl.delete_renderbuffer(rbo);
             let texture = gl.create_texture().unwrap();
 
             // According to my testing, AMD graphics cards don't support sharing renderbuffers.
-            let color_handle_gl = (dx_interop.DXRegisterObjectNV)(
+            color_handle_gl = (dx_interop.DXRegisterObjectNV)(
                 gl_handle_d3d,
                 color_buffer.as_raw(),
                 texture.0.into(),
@@ -261,10 +286,10 @@ pub(crate) fn create_dxgi_swapchain(
             );
 
             if color_handle_gl.is_invalid() {
-                log::error!("Failed to register color buffer handle");
+                return Err("Failed to register texture with DXGI.".into());
             }
 
-            log::debug!("Registered texture with DXGI");
+            log::debug!("Registered DXGI swapchain as GL texture");
 
             // Bind the texture to the framebuffer
             gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
@@ -276,7 +301,7 @@ pub(crate) fn create_dxgi_swapchain(
                 0,
             );
         } else {
-            log::debug!("Registed renderbuffer with DXGI");
+            log::debug!("Registered DXGI swapchain as GL renderbuffer");
 
             gl.bind_framebuffer(GL::FRAMEBUFFER, Some(fbo));
             gl.framebuffer_renderbuffer(
@@ -288,36 +313,36 @@ pub(crate) fn create_dxgi_swapchain(
         }
 
         match gl.check_framebuffer_status(GL::FRAMEBUFFER) {
-            GL::FRAMEBUFFER_UNSUPPORTED => {
-                log::error!("DXGI Framebuffer: unsupported")
+            GL::FRAMEBUFFER_COMPLETE => {
+                log::debug!("GL Framebuffer complete");
             }
+            // GL::FRAMEBUFFER_UNSUPPORTED => return Err("GL Framebuffer unsupported".into()),
+            GL::FRAMEBUFFER_UNSUPPORTED => log::debug!("GL Framebuffer unsupported"),
             GL::FRAMEBUFFER_INCOMPLETE_ATTACHMENT => {
-                log::error!("DXGI Framebuffer: incomplete attachment")
+                return Err("GL Framebuffer incomplete attachment".into())
             }
             GL::FRAMEBUFFER_INCOMPLETE_MISSING_ATTACHMENT => {
-                log::error!("DXGI Framebuffer: missing attachment")
+                return Err("GL Framebuffer missing attachment".into())
             }
-            GL::FRAMEBUFFER_COMPLETE => {
-                log::debug!("DXGI Framebuffer: complete");
-            }
-            other => log::error!("DXGI Framebuffer: {:#x}", other),
+            other => return Err(format!("DXGI Framebuffer: {:#x}", other).into()),
         }
 
         gl.bind_framebuffer(GL::FRAMEBUFFER, None);
 
-        let swap_chain_2: IDXGISwapChain2 =
-            swap_chain.cast().expect("failed to cast the SwapChain");
+        // let swap_chain_2: IDXGISwapChain2 =
+        //     swap_chain.cast().expect("failed to cast the SwapChain");
         // let frame_latency_waitable_object = swap_chain_2.GetFrameLatencyWaitableObject();
 
-        DXGIInterop {
+        Ok(DXGIInterop {
             device,
             context,
-            swap_chain: swap_chain_2,
+            // swap_chain: swap_chain2,
+            swap_chain,
             gl_handle_d3d,
             dx_interop,
             color_handle_gl,
             // frame_latency_waitable_object,
             fbo,
-        }
+        })
     }
 }
