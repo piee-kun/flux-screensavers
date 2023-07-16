@@ -183,7 +183,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
     use simplelog::*;
 
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
-        LevelFilter::Debug,
+        LevelFilter::Warn,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,

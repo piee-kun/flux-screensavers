@@ -8,22 +8,18 @@ use glow as GL;
 use glow::HasContext;
 use raw_window_handle::RawWindowHandle;
 
-use windows::core::{ComInterface, Interface, PCSTR};
+use windows::core::{Interface, PCSTR};
 use windows::Win32::Foundation::{BOOL, HANDLE, HWND};
 use windows::Win32::Graphics::Direct3D::D3D_DRIVER_TYPE_HARDWARE;
 use windows::Win32::Graphics::Direct3D11::{
     D3D11CreateDeviceAndSwapChain, ID3D11Device, ID3D11DeviceContext, ID3D11RenderTargetView,
-    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_MAX_DEPTH, D3D11_MIN_DEPTH, D3D11_SDK_VERSION,
-    D3D11_VIEWPORT,
+    ID3D11Texture2D, D3D11_CREATE_DEVICE_FLAG, D3D11_SDK_VERSION,
 };
 use windows::Win32::Graphics::Dxgi::Common::{
     DXGI_FORMAT_R8G8B8A8_UNORM, DXGI_MODE_DESC, DXGI_SAMPLE_DESC,
 };
 use windows::Win32::Graphics::Dxgi::{
-    IDXGISwapChain, IDXGISwapChain2, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING,
-    DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT, DXGI_SWAP_EFFECT_DISCARD,
-    DXGI_SWAP_EFFECT_FLIP_DISCARD, DXGI_SWAP_EFFECT_FLIP_SEQUENTIAL,
-    DXGI_USAGE_RENDER_TARGET_OUTPUT,
+    IDXGISwapChain, DXGI_SWAP_CHAIN_DESC, DXGI_SWAP_EFFECT_DISCARD, DXGI_USAGE_RENDER_TARGET_OUTPUT,
 };
 use windows::Win32::Graphics::Gdi::HDC;
 use windows::Win32::Graphics::OpenGL::{wglGetCurrentDC, wglGetProcAddress};
@@ -54,6 +50,7 @@ impl fmt::Display for Problem {
     }
 }
 
+#[allow(dead_code)]
 pub(crate) struct DXGIInterop {
     device: ID3D11Device,
     context: ID3D11DeviceContext,
@@ -61,7 +58,6 @@ pub(crate) struct DXGIInterop {
     gl_handle_d3d: HANDLE,
     dx_interop: WGLDXInteropExtensionFunctions,
     color_handle_gl: HANDLE,
-    // frame_latency_waitable_object: HANDLE,
     fbo: GL::NativeFramebuffer,
 }
 
@@ -69,7 +65,7 @@ type GLint = c_int;
 type GLenum = c_uint;
 type GLuint = c_uint;
 
-const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
+// const WGL_ACCESS_READ_WRITE_NV: u32 = 0x0001;
 const WGL_ACCESS_READ_WRITE_DISCARD_NV: u32 = 0x0002;
 
 #[allow(non_snake_case, dead_code)]
@@ -96,9 +92,6 @@ pub(crate) unsafe fn with_dxgi_swapchain(
     dxgi_interop: &mut DXGIInterop,
     render: impl FnOnce(&GL::NativeFramebuffer),
 ) {
-    // use windows::Win32::System::Threading::{WaitForSingleObject, INFINITE};
-    // WaitForSingleObject(dxgi_interop.frame_latency_waitable_object, INFINITE);
-
     (dxgi_interop.dx_interop.DXLockObjectsNV)(
         dxgi_interop.gl_handle_d3d,
         1,
@@ -151,18 +144,13 @@ pub(crate) fn create_dxgi_swapchain(
                 BufferCount: 2,
                 OutputWindow: hwnd,
                 Windowed: true.into(),
-                SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
                 // FLIP modes don't work on NVIDIA cards.
-                // SwapEffect: DXGI_SWAP_EFFECT_FLIP_DISCARD,
+                SwapEffect: DXGI_SWAP_EFFECT_DISCARD,
                 SampleDesc: DXGI_SAMPLE_DESC {
                     // Disable MSAA (also unsupported with the 'flip' model)
                     Count: 1,
                     Quality: 0,
                 },
-                // Flags: DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0 as u32,
-                // Flags: (DXGI_SWAP_CHAIN_FLAG_FRAME_LATENCY_WAITABLE_OBJECT.0
-                //     | DXGI_SWAP_CHAIN_FLAG_ALLOW_TEARING.0
-                //     | DXGI_SWAP_CHAIN_FLAG_ALLOW_MODE_SWITCH.0) as u32,
                 ..Default::default()
             }),
             Some(&mut p_swap_chain),
@@ -316,7 +304,7 @@ pub(crate) fn create_dxgi_swapchain(
             GL::FRAMEBUFFER_COMPLETE => {
                 log::debug!("GL Framebuffer complete");
             }
-            // GL::FRAMEBUFFER_UNSUPPORTED => return Err("GL Framebuffer unsupported".into()),
+            // Nvidia complains that the buffer is unsupported, but it still works. *shrug*
             GL::FRAMEBUFFER_UNSUPPORTED => log::debug!("GL Framebuffer unsupported"),
             GL::FRAMEBUFFER_INCOMPLETE_ATTACHMENT => {
                 return Err("GL Framebuffer incomplete attachment".into())
@@ -329,19 +317,13 @@ pub(crate) fn create_dxgi_swapchain(
 
         gl.bind_framebuffer(GL::FRAMEBUFFER, None);
 
-        // let swap_chain_2: IDXGISwapChain2 =
-        //     swap_chain.cast().expect("failed to cast the SwapChain");
-        // let frame_latency_waitable_object = swap_chain_2.GetFrameLatencyWaitableObject();
-
         Ok(DXGIInterop {
             device,
             context,
-            // swap_chain: swap_chain2,
             swap_chain,
             gl_handle_d3d,
             dx_interop,
             color_handle_gl,
-            // frame_latency_waitable_object,
             fbo,
         })
     }
