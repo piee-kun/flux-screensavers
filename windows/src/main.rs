@@ -50,12 +50,12 @@ const FADE_TO_BLACK_DURATION: f64 = 300.0;
 
 type WindowId = u32;
 
+#[allow(dead_code)]
 struct Instance {
     flux: Flux,
     window: Window,
 
     gl_context: gl_context::GLContext,
-    #[allow(dead_code)]
     gl_window: Option<Window>,
 
     swapchain: Swapchain,
@@ -396,7 +396,7 @@ fn new_preview_window(
     let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
         inner_size,
-        None,
+        raw_window_handle,
         Some(window.raw_window_handle()),
     );
 
@@ -460,8 +460,7 @@ fn new_instance(
     let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
         window.size().into(),
-        Some(hidden_window.raw_window_handle()),
-        // Some(window.raw_window_handle()),
+        hidden_window.raw_window_handle(),
         None,
     );
 

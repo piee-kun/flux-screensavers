@@ -34,13 +34,11 @@ pub(crate) fn new_gl_context(
     raw_display_handle: RawDisplayHandle,
     inner_size: PhysicalSize<u32>,
 
-    hidden_window: Option<RawWindowHandle>,
+    raw_window_handle: RawWindowHandle,
     // A hack to create the gl_display using the invisible event window
     // we create for the preview.
     attr_window: Option<RawWindowHandle>,
 ) -> GLContext {
-    let raw_window_handle = hidden_window.unwrap();
-
     let template = ConfigTemplateBuilder::new()
         .with_buffer_type(glutin::config::ColorBufferType::Rgb {
             r_size: 8,
