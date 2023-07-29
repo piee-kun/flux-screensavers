@@ -242,7 +242,12 @@ pub(crate) fn create_dxgi_swapchain(
         // Register the D3D11 device with GL
         let gl_handle_d3d = (dx_interop.DXOpenDeviceNV)(device.as_raw());
         if gl_handle_d3d.is_invalid() {
-            return Err("Failed to open the GL DX interop device".into());
+            let msg = std::io::Error::last_os_error();
+            return Err(format!(
+                "Failed to open the GL DX interop device. OS Error: {:?}",
+                msg
+            )
+            .into());
         }
 
         log::debug!("Opened GL DX interop device");
@@ -274,7 +279,10 @@ pub(crate) fn create_dxgi_swapchain(
             );
 
             if color_handle_gl.is_invalid() {
-                return Err("Failed to register texture with DXGI.".into());
+                let msg = std::io::Error::last_os_error();
+                return Err(
+                    format!("Failed to register texture with DXGI. OS Error: {:?}", msg).into(),
+                );
             }
 
             log::debug!("Registered DXGI swapchain as GL texture");

@@ -132,6 +132,8 @@ pub(crate) fn new_gl_context(
     // Set common GL state
     unsafe {
         glow_context.disable(GL::MULTISAMPLE);
+        // glow_context.disable(GL::STENCIL_TEST);
+        // glow_context.disable(GL::DEPTH_TEST);
     }
 
     GLContext {

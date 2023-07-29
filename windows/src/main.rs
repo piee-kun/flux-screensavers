@@ -54,10 +54,7 @@ type WindowId = u32;
 struct Instance {
     flux: Flux,
     window: Window,
-
     gl_context: gl_context::GLContext,
-    gl_window: Option<Window>,
-
     swapchain: Swapchain,
 }
 
@@ -423,7 +420,6 @@ fn new_preview_window(
     Ok(Instance {
         flux,
         gl_context,
-        gl_window: None,
         window,
         swapchain,
     })
@@ -450,17 +446,10 @@ fn new_instance(
         platform::windows::window::enable_transparency(&window.raw_window_handle())
     };
 
-    let hidden_window = video_subsystem
-        .window("GL Context Window", 1, 1)
-        .hidden()
-        .opengl()
-        .build()
-        .map_err(|err| err.to_string())?;
-
     let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
         window.size().into(),
-        hidden_window.raw_window_handle(),
+        window.raw_window_handle(),
         None,
     );
 
@@ -482,8 +471,6 @@ fn new_instance(
     Ok(Instance {
         flux,
         gl_context,
-        gl_window: Some(hidden_window),
-        // gl_window: None,
         window,
         swapchain,
     })
@@ -511,7 +498,10 @@ fn create_swapchain(
             use glutin::surface::SwapInterval;
             use std::num::NonZeroU32;
 
-            log::warn!("Failed to create DXGI swapchain: {}", err);
+            log::warn!(
+                "Failed to create DXGI swapchain: {}. Falling back to GL.",
+                err
+            );
 
             // Try setting vsync.
             if let Err(res) = gl_context.surface.set_swap_interval(
