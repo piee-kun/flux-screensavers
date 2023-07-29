@@ -2,7 +2,7 @@
   description = "Flux Screensavers";
 
   inputs = {
-    nixpkgs.url = "github:NixOS/nixpkgs/23.05-pre";
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-23.05";
     flake-utils.url = "github:numtide/flake-utils";
     crane = {
       url = "github:ipetkov/crane";
@@ -65,13 +65,13 @@
       });
 
       SDL2_static = pkgs.SDL2.overrideAttrs (old: rec {
-        version = "2.26.4";
+        version = "2.26.5";
         name = "SDL2-static-${version}";
         src = builtins.fetchurl {
           url =
             "https://www.libsdl.org/release/${old.pname}-${version}.tar.gz";
           sha256 =
-            "sha256:0cbji2l35j5w9v5kkb9s16n6w03xg81kj2zqygcqlxpvk1j6h3qs";
+            "sha256:1xxbbvn0jmw5fgn26fyybc7xd3xsnjk67lxi8lychr5yl4yym3xd";
         };
         dontDisableStatic = true;
 

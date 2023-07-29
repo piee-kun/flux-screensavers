@@ -1,5 +1,6 @@
 use std::collections::vec_deque;
 use std::iter::Map;
+use std::num::NonZeroU32;
 
 use sdl2::video::Window;
 use sdl2::VideoSubsystem;
@@ -54,5 +55,18 @@ impl HasMonitors for VideoSubsystem {
         platform::monitor::available_monitors()
             .into_iter()
             .map(|inner| MonitorHandle { inner })
+    }
+}
+
+/// [`winit::dpi::PhysicalSize<u32>`] non-zero extensions.
+pub trait NonZeroU32PhysicalSize {
+    /// Converts to non-zero `(width, height)`.
+    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)>;
+}
+impl NonZeroU32PhysicalSize for PhysicalSize<u32> {
+    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)> {
+        let w = NonZeroU32::new(self.width)?;
+        let h = NonZeroU32::new(self.height)?;
+        Some((w, h))
     }
 }

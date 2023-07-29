@@ -3,6 +3,8 @@
 
 mod cli;
 mod config;
+mod gl_context;
+mod platform;
 mod settings_window;
 mod surface;
 mod wallpaper;
@@ -14,16 +16,14 @@ use flux::Flux;
 use winit_compat::{HasMonitors, HasWinitWindow, MonitorHandle};
 
 use std::collections::HashMap;
-use std::ffi::CString;
-use std::num::NonZeroU32;
 use std::{fs, path, process, rc::Rc};
 
 use glow as GL;
 use glow::HasContext;
+use glutin::context::PossiblyCurrentContextGlSurfaceAccessor;
+use glutin::prelude::GlSurface;
 
-use raw_window_handle::{
-    HasRawDisplayHandle, HasRawWindowHandle, RawDisplayHandle, RawWindowHandle,
-};
+use raw_window_handle::{HasRawDisplayHandle, HasRawWindowHandle, RawWindowHandle};
 
 #[cfg(windows)]
 use windows::Win32::Foundation::HWND;
@@ -31,54 +31,121 @@ use windows::Win32::Foundation::HWND;
 use sdl2::video::Window;
 use winit::dpi::PhysicalSize;
 
-use glutin::config::ConfigTemplateBuilder;
-use glutin::context::{ContextApi, ContextAttributesBuilder, PossiblyCurrentContext, Version};
-use glutin::display::{Display, DisplayApiPreference, GetGlDisplay};
-use glutin::prelude::*;
-use glutin::surface::{Surface, SurfaceAttributesBuilder, SwapInterval, WindowSurface};
+// http://developer.download.nvidia.com/devzone/devcenter/gamegraphics/files/OptimusRenderingPolicies.pdf
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static mut NvOptimusEnablement: i32 = 1;
 
+// https://gpuopen.com/learn/amdpowerxpressrequesthighperformance/
+#[cfg(target_os = "windows")]
+#[allow(non_upper_case_globals)]
+#[no_mangle]
+pub static mut AmdPowerXpressRequestHighPerformance: i32 = 1;
+
+// Higher values will make the screensaver tolerate more mouse movement before exiting.
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
-
-// In milliseconds
+// In milliseconds. TODO: likely doesn't work on most platforms
 const FADE_TO_BLACK_DURATION: f64 = 300.0;
 
 type WindowId = u32;
 
+#[allow(dead_code)]
 struct Instance {
     flux: Flux,
-    gl_context: PossiblyCurrentContext,
-    gl_surface: Surface<WindowSurface>,
-    gl: Rc<glow::Context>,
     window: Window,
+    gl_context: gl_context::GLContext,
+    swapchain: Swapchain,
+}
+
+enum Swapchain {
+    Gl,
+
+    #[cfg(windows)]
+    Dxgi(platform::windows::dxgi_swapchain::DXGIInterop),
 }
 
 impl Instance {
     pub fn draw(&mut self, timestamp: f64) {
-        self.gl_context
-            .make_current(&self.gl_surface)
-            .expect("make OpenGL context current");
+        match self.swapchain {
+            Swapchain::Gl => {
+                self.gl_context
+                    .context
+                    .make_current(&self.gl_context.surface)
+                    .expect("make OpenGL context current");
 
-        self.flux.animate(timestamp);
+                self.flux.animate(timestamp);
 
-        self.gl_surface
-            .swap_buffers(&self.gl_context)
-            .expect("swap OpenGL buffers");
+                self.gl_context
+                    .surface
+                    .swap_buffers(&self.gl_context.context)
+                    .expect("swap OpenGL buffers");
+            }
+
+            #[cfg(windows)]
+            Swapchain::Dxgi(ref mut dxgi_interop) => unsafe {
+                platform::windows::dxgi_swapchain::with_dxgi_swapchain(dxgi_interop, |fbo| {
+                    self.gl_context
+                        .context
+                        .make_current(&self.gl_context.surface)
+                        .expect("make OpenGL context current");
+
+                    self.flux.compute(timestamp);
+
+                    self.gl_context
+                        .gl
+                        .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
+
+                    self.flux.render();
+
+                    self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+                    self.gl_context.gl.finish();
+                });
+            },
+        }
     }
 
     pub fn fade_to_black(&mut self, timestamp: f64) {
-        self.gl_context
-            .make_current(&self.gl_surface)
-            .expect("make OpenGL context current");
+        match self.swapchain {
+            Swapchain::Gl => {
+                self.gl_context
+                    .context
+                    .make_current(&self.gl_context.surface)
+                    .expect("make OpenGL context current");
 
-        let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
-        unsafe {
-            self.gl.clear_color(0.0, 0.0, 0.0, progress);
-            self.gl.clear(GL::COLOR_BUFFER_BIT);
+                let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+                unsafe {
+                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
+                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
+                }
+
+                self.gl_context
+                    .surface
+                    .swap_buffers(&self.gl_context.context)
+                    .expect("swap OpenGL buffers");
+            }
+
+            #[cfg(windows)]
+            Swapchain::Dxgi(ref mut dxgi_interop) => unsafe {
+                platform::windows::dxgi_swapchain::with_dxgi_swapchain(dxgi_interop, |fbo| {
+                    self.gl_context
+                        .context
+                        .make_current(&self.gl_context.surface)
+                        .expect("make OpenGL context current");
+
+                    self.gl_context
+                        .gl
+                        .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
+
+                    let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
+                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
+                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
+
+                    self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
+                    self.gl_context.gl.finish();
+                });
+            },
         }
-
-        self.gl_surface
-            .swap_buffers(&self.gl_context)
-            .expect("swap OpenGL buffers");
     }
 }
 
@@ -113,7 +180,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
     use simplelog::*;
 
     let mut loggers: Vec<Box<dyn SharedLogger>> = vec![TermLogger::new(
-        LevelFilter::Debug,
+        LevelFilter::Warn,
         Config::default(),
         TerminalMode::Mixed,
         ColorChoice::Auto,
@@ -144,7 +211,7 @@ fn init_logging(optional_log_dir: Option<&path::Path>) {
 
 fn run_flux(mode: Mode, config: Config) -> Result<(), String> {
     #[cfg(windows)]
-    set_dpi_awareness()?;
+    platform::windows::dpi_awareness::set_dpi_awareness()?;
 
     // By default, SDL disables the screensaver and doesn’t allow the display to sleep. We want
     // both of these things to happen in both screensaver and preview modes.
@@ -244,7 +311,9 @@ fn run_main_loop(
                     ..
                 }
                 | Event::KeyDown { .. }
-                | Event::MouseButtonDown { .. } => break 'main,
+                | Event::MouseButtonDown { .. } => {
+                    break 'main;
+                }
 
                 Event::MouseMotion { xrel, yrel, .. } => {
                     if f64::max(xrel.abs() as f64, yrel.abs() as f64)
@@ -295,27 +364,6 @@ fn new_preview_window(
 
     let inner_size = PhysicalSize::new(rect.right as u32, rect.bottom as u32);
 
-    // Tell SDL that the window we’re about to adopt will be used with
-    // OpenGL.
-    sdl2::hint::set("SDL_VIDEO_FOREIGN_WINDOW_OPENGL", "1");
-    let sdl_preview_window: *mut sdl2_sys::SDL_Window =
-        unsafe { sdl2_sys::SDL_CreateWindowFrom(win32_handle.hwnd as _) };
-
-    if sdl_preview_window.is_null() {
-        return Err(format!(
-            "Can’t create the preview window with the handle {:?}",
-            win32_handle.hwnd
-        ));
-    }
-
-    let preview_window: Window = unsafe {
-        Window::from_ll(
-            video_subsystem.clone(),
-            sdl_preview_window,
-            std::ptr::null_mut(),
-        )
-    };
-
     // You need to create an actual window to listen to events. We’ll
     // then link this to the preview window as a child to cleanup when
     // the preview dialog is closed.
@@ -330,20 +378,26 @@ fn new_preview_window(
     match window.raw_window_handle() {
         #[cfg(target_os = "windows")]
         raw_window_handle::RawWindowHandle::Win32(event_window_handle) => {
-            if unsafe { set_window_parent_win32(HWND(event_window_handle.hwnd as _), preview_hwnd) }
-            {
+            if unsafe {
+                platform::windows::window::set_window_parent_win32(
+                    HWND(event_window_handle.hwnd as _),
+                    preview_hwnd,
+                )
+            } {
                 log::debug!("Linked preview window");
             }
         }
         _ => (),
     }
 
-    let (gl_context, gl_surface, glow_context) = new_gl_context(
+    let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
-        raw_window_handle,
         inner_size,
+        raw_window_handle,
         Some(window.raw_window_handle()),
     );
+
+    let swapchain = create_swapchain(&raw_window_handle, &gl_context);
 
     let wallpaper = window
         .current_monitor()
@@ -354,7 +408,7 @@ fn new_preview_window(
     let logical_size = physical_size.to_logical(scale_factor);
     let settings = config.to_settings(wallpaper);
     let flux = Flux::new(
-        &glow_context,
+        &gl_context.gl,
         logical_size.width,
         logical_size.height,
         physical_size.width,
@@ -366,9 +420,8 @@ fn new_preview_window(
     Ok(Instance {
         flux,
         gl_context,
-        gl_surface,
-        gl: Rc::clone(&glow_context),
         window,
+        swapchain,
     })
 }
 
@@ -388,20 +441,25 @@ fn new_instance(
         .build()
         .map_err(|err| err.to_string())?;
 
-    unsafe { enable_transparency(&window.raw_window_handle()) };
+    #[cfg(windows)]
+    unsafe {
+        platform::windows::window::enable_transparency(&window.raw_window_handle())
+    };
 
-    let (gl_context, gl_surface, glow_context) = new_gl_context(
+    let gl_context = gl_context::new_gl_context(
         window.raw_display_handle(),
-        window.raw_window_handle(),
         window.size().into(),
+        window.raw_window_handle(),
         None,
     );
+
+    let swapchain = create_swapchain(&window.raw_window_handle(), &gl_context);
 
     let physical_size = surface.size;
     let logical_size = physical_size.to_logical(surface.scale_factor);
     let settings = config.to_settings(surface.wallpaper.clone());
     let flux = Flux::new(
-        &glow_context,
+        &Rc::clone(&gl_context.gl),
         logical_size.width,
         logical_size.height,
         physical_size.width,
@@ -413,219 +471,47 @@ fn new_instance(
     Ok(Instance {
         flux,
         gl_context,
-        gl_surface,
-        gl: Rc::clone(&glow_context),
         window,
+        swapchain,
     })
 }
 
-/// Create an OpenGL context, surface, and initialize the glow API.
-///
-/// Hacks
-///
-/// The optional attr_window should be used when rendering to the preview window. Instead of just
-/// using the handle to the preview window, pass the window handle for the invisible event window
-/// to work around a bug where Windows complains that it can't find the window class.
-///
-/// This code has been modified from glutin-winit and only supports WGL (Windows).
-fn new_gl_context(
-    raw_display_handle: RawDisplayHandle,
-    raw_window_handle: RawWindowHandle,
-    inner_size: PhysicalSize<u32>,
-
-    // A hack to create the gl_display using the invisible event window
-    // we create for the preview.
-    attr_window: Option<RawWindowHandle>,
-) -> (
-    PossiblyCurrentContext,
-    Surface<WindowSurface>,
-    Rc<glow::Context>,
-) {
-    let template = ConfigTemplateBuilder::new()
-        .with_buffer_type(glutin::config::ColorBufferType::Rgb {
-            r_size: 8,
-            g_size: 8,
-            b_size: 8,
-        })
-        .with_alpha_size(8)
-        .with_depth_size(0)
-        .with_stencil_size(0)
-        .with_transparency(true)
-        .with_multisampling(0)
-        .compatible_with_native_window(raw_window_handle)
-        .build();
-
-    // Only WGL requires a window to create a full-fledged OpenGL context
-    let attr_window = attr_window.unwrap_or(raw_window_handle);
-    let preference = DisplayApiPreference::WglThenEgl(Some(attr_window));
-    let gl_display = unsafe { Display::new(raw_display_handle, preference).unwrap() };
-
-    let gl_config = unsafe {
-        gl_display
-            .find_configs(template)
-            .unwrap()
-            .reduce(|accum, config| {
-                let transparency_check = config.supports_transparency().unwrap_or(false)
-                    & !accum.supports_transparency().unwrap_or(false);
-
-                if transparency_check {
-                    config
-                } else {
-                    accum
-                }
-            })
-            .expect("cannot find a suitable GL config")
-    };
-
-    log::debug!(
-        "Picked a config with {} samples and {:?} transparency",
-        gl_config.num_samples(),
-        gl_config.supports_transparency()
-    );
-
-    // Request the minimum required OpenGL version for Flux
-    let context_attributes = ContextAttributesBuilder::new()
-        .with_context_api(ContextApi::OpenGl(Some(Version::new(3, 3))))
-        .build(Some(raw_window_handle));
-
-    // Fallback to GLES 3.0 (aka WebGL 2.0)
-    let fallback_context_attributes = ContextAttributesBuilder::new()
-        .with_context_api(ContextApi::Gles(Some(Version::new(3, 0))))
-        .build(Some(raw_window_handle));
-
-    let not_current_gl_context = unsafe {
-        gl_display
-            .create_context(&gl_config, &context_attributes)
-            .unwrap_or_else(|_| {
-                gl_display
-                    .create_context(&gl_config, &fallback_context_attributes)
-                    .expect("failed to create OpenGL context")
-            })
-    };
-
-    let (width, height) = inner_size.non_zero().expect("non-zero window size").into();
-    let attrs =
-        SurfaceAttributesBuilder::<WindowSurface>::new().build(raw_window_handle, width, height);
-
-    let gl_surface = unsafe {
-        gl_config
-            .display()
-            .create_window_surface(&gl_config, &attrs)
-            .unwrap()
-    };
-
-    // Make it current.
-    let gl_context = not_current_gl_context.make_current(&gl_surface).unwrap();
-
-    // Try setting vsync.
-    if let Err(res) =
-        gl_surface.set_swap_interval(&gl_context, SwapInterval::Wait(NonZeroU32::new(1).unwrap()))
-    {
-        log::error!("Failed to set vsync: {res:?}");
-    }
-
-    let glow_context = unsafe {
-        glow::Context::from_loader_function(|s| {
-            gl_display.get_proc_address(&CString::new(s).unwrap().as_c_str()) as *const _
-        })
-    };
-    log::debug!("{:?}", glow_context.version());
-
-    // Set common GL state
-    unsafe {
-        glow_context.disable(GL::MULTISAMPLE);
-    }
-
-    (gl_context, gl_surface, Rc::new(glow_context))
+#[cfg(not(windows))]
+fn create_swapchain(
+    raw_window_handle: &RawWindowHandle,
+    gl_context: &gl_context::GLContext,
+) -> Swapchain {
+    Swapchain::Gl
 }
 
-// Specifying DPI awareness in the app manifest does not apply when running in a
-// preview window.
 #[cfg(windows)]
-pub fn set_dpi_awareness() -> Result<(), String> {
-    use windows::Win32::Foundation::E_INVALIDARG;
-    use windows::Win32::UI::HiDpi::{
-        GetProcessDpiAwareness, SetProcessDpiAwareness, PROCESS_PER_MONITOR_DPI_AWARE,
-        PROCESS_SYSTEM_DPI_AWARE,
-    };
+fn create_swapchain(
+    raw_window_handle: &RawWindowHandle,
+    gl_context: &gl_context::GLContext,
+) -> Swapchain {
+    let dxgi_interop =
+        platform::windows::dxgi_swapchain::create_dxgi_swapchain(raw_window_handle, &gl_context.gl);
 
-    if let Err(err) = unsafe { SetProcessDpiAwareness(PROCESS_PER_MONITOR_DPI_AWARE) } {
-        match err.code() {
-            E_INVALIDARG => return Err("Can’t enable support for high-resolution screens.".to_string()),
-            // The app manifest settings, if applied, trigger this path.
-            _ => {
-                return match unsafe { GetProcessDpiAwareness(None) } {
-                    Ok(awareness)
-                        if awareness == PROCESS_PER_MONITOR_DPI_AWARE
-                        || awareness == PROCESS_SYSTEM_DPI_AWARE => Ok(()),
-                    _ => Err("Can’t enable support for high-resolution screens. The setting has been modified and set to an unsupported value.".to_string()),
-                }
+    match dxgi_interop {
+        Ok(dxgi_interop) => Swapchain::Dxgi(dxgi_interop),
+        Err(err) => {
+            use glutin::surface::SwapInterval;
+            use std::num::NonZeroU32;
+
+            log::warn!(
+                "Failed to create DXGI swapchain: {}. Falling back to GL.",
+                err
+            );
+
+            // Try setting vsync.
+            if let Err(res) = gl_context.surface.set_swap_interval(
+                &gl_context.context,
+                SwapInterval::Wait(NonZeroU32::new(1).unwrap()),
+            ) {
+                log::error!("Failed to set vsync: {res:?}");
             }
+
+            Swapchain::Gl
         }
-    }
-
-    Ok(())
-}
-
-#[cfg(windows)]
-unsafe fn set_window_parent_win32(handle: HWND, parent_handle: HWND) -> bool {
-    use windows::Win32::UI::WindowsAndMessaging::{
-        GetWindowLongW, SetParent, SetWindowLongPtrA, GWL_STYLE, WINDOW_STYLE, WS_CHILD, WS_POPUP,
-    };
-
-    // Attach our window to the parent window.
-    // You can get more error information with `GetLastError`
-    // https://docs.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setparent
-    SetParent(handle, parent_handle);
-
-    let style = WINDOW_STYLE(GetWindowLongW(handle, GWL_STYLE) as u32);
-    let new_style = (style & !WS_POPUP) | WS_CHILD;
-
-    // `SetParent` doesn’t actually set the window style flags. `WS_POPUP` and
-    // `WS_CHILD` are mutually exclusive.
-    SetWindowLongPtrA(handle, GWL_STYLE, new_style.0 as isize);
-
-    true
-}
-
-#[cfg(windows)]
-unsafe fn enable_transparency(handle: &RawWindowHandle) {
-    use windows::Win32::Graphics::{
-        Dwm::{DwmEnableBlurBehindWindow, DWM_BB_BLURREGION, DWM_BB_ENABLE, DWM_BLURBEHIND},
-        Gdi::{CreateRectRgn, DeleteObject},
-    };
-
-    let hwnd = match handle {
-        raw_window_handle::RawWindowHandle::Win32(event_window_handle) => {
-            HWND(event_window_handle.hwnd as _)
-        }
-        _ => panic!("This platform is not supported yet"),
-    };
-
-    // Empty region for the blur effect, so the window is fully transparent
-    let region = CreateRectRgn(0, 0, -1, -1);
-
-    let bb = DWM_BLURBEHIND {
-        dwFlags: DWM_BB_ENABLE | DWM_BB_BLURREGION,
-        fEnable: true.into(),
-        hRgnBlur: region,
-        fTransitionOnMaximized: false.into(),
-    };
-    if let Err(err) = DwmEnableBlurBehindWindow(hwnd, &bb) {
-        log::warn!("Failed to set window transparency: {:?}", err);
-    }
-    DeleteObject(region);
-}
-
-/// [`winit::dpi::PhysicalSize<u32>`] non-zero extensions.
-trait NonZeroU32PhysicalSize {
-    /// Converts to non-zero `(width, height)`.
-    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)>;
-}
-impl NonZeroU32PhysicalSize for PhysicalSize<u32> {
-    fn non_zero(self) -> Option<(NonZeroU32, NonZeroU32)> {
-        let w = NonZeroU32::new(self.width)?;
-        let h = NonZeroU32::new(self.height)?;
-        Some((w, h))
     }
 }
