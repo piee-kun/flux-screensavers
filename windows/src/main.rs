@@ -45,8 +45,6 @@ pub static mut AmdPowerXpressRequestHighPerformance: i32 = 1;
 
 // Higher values will make the screensaver tolerate more mouse movement before exiting.
 const MINIMUM_MOUSE_MOTION_TO_EXIT_SCREENSAVER: f64 = 10.0;
-// In milliseconds. TODO: likely doesn't work on most platforms
-const FADE_TO_BLACK_DURATION: f64 = 300.0;
 
 type WindowId = u32;
 
@@ -97,49 +95,6 @@ impl Instance {
                         .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
 
                     self.flux.render();
-
-                    self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
-                    self.gl_context.gl.finish();
-                });
-            },
-        }
-    }
-
-    pub fn fade_to_black(&mut self, timestamp: f64) {
-        match self.swapchain {
-            Swapchain::Gl => {
-                self.gl_context
-                    .context
-                    .make_current(&self.gl_context.surface)
-                    .expect("make OpenGL context current");
-
-                let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
-                unsafe {
-                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
-                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
-                }
-
-                self.gl_context
-                    .surface
-                    .swap_buffers(&self.gl_context.context)
-                    .expect("swap OpenGL buffers");
-            }
-
-            #[cfg(windows)]
-            Swapchain::Dxgi(ref mut dxgi_interop) => unsafe {
-                platform::windows::dxgi_swapchain::with_dxgi_swapchain(dxgi_interop, |fbo| {
-                    self.gl_context
-                        .context
-                        .make_current(&self.gl_context.surface)
-                        .expect("make OpenGL context current");
-
-                    self.gl_context
-                        .gl
-                        .bind_framebuffer(GL::FRAMEBUFFER, Some(*fbo));
-
-                    let progress = (timestamp / FADE_TO_BLACK_DURATION).clamp(0.0, 1.0) as f32;
-                    self.gl_context.gl.clear_color(0.0, 0.0, 0.0, progress);
-                    self.gl_context.gl.clear(GL::COLOR_BUFFER_BIT);
 
                     self.gl_context.gl.bind_framebuffer(GL::FRAMEBUFFER, None);
                     self.gl_context.gl.finish();
@@ -329,12 +284,7 @@ fn run_main_loop(
 
         for (_, instance) in instances.iter_mut() {
             let timestamp = start.elapsed().as_secs_f64() * 1000.0;
-
-            if timestamp < FADE_TO_BLACK_DURATION {
-                instance.fade_to_black(timestamp);
-            } else {
-                instance.draw(timestamp);
-            }
+            instance.draw(timestamp);
         }
     }
 
