@@ -13,8 +13,8 @@ path = "src/main.rs"
 
 [package.metadata.winres]
 ProductName = "Flux"
-FileDescription = "An ode to the macOS Drift screensaver"
-LegalCopyright = "© 2022 Sander Melnikov"
+FileDescription = "An open-source tribute to the macOS Drift screensaver"
+LegalCopyright = "© 2023 Sander Melnikov"
 
 [profile.release]
 codegen-units = 1 # Allow further optimisations by disabling parallel compilation
