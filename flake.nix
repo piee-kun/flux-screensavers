@@ -34,7 +34,7 @@
           overlays = [(import rust-overlay)];
         };
 
-        rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default;
+        rustToolchain = pkgs.pkgsBuildHost.rust-bin.nightly.latest.default;
       in
         pkgs.mkShell {
           packages = with pkgs; [rustToolchain alejandra];
@@ -46,7 +46,7 @@
         overlays = [(import rust-overlay)];
       };
 
-      rustToolchain = pkgs.pkgsBuildHost.rust-bin.stable.latest.default.override {
+      rustToolchain = pkgs.pkgsBuildHost.rust-bin.nightly.latest.default.override {
         extensions = [
           "rust-src"
           "cargo"
@@ -112,7 +112,8 @@
 
           CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
-          RUSTFLAGS = "-L ${SDL2_static}/lib -C link-args=-Wl,--export-all-symbols";
+          # Link to the static SDL2 library and export the static GPU preference symbols
+          RUSTFLAGS = "-L ${SDL2_static}/lib -Zexport-executable-symbols";
 
           # Change the extension to .scr (Windows screensaver)
           postInstall = ''
