@@ -112,7 +112,7 @@
 
           CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
           CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
-          RUSTFLAGS = "-L ${SDL2_static}/lib";
+          RUSTFLAGS = "-L ${SDL2_static}/lib -C link-args=-Wl,--export-all-symbols";
 
           # Change the extension to .scr (Windows screensaver)
           postInstall = ''
