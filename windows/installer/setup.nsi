@@ -14,7 +14,7 @@ Unicode True
 Name "${PRODUCT}"
 OutFile "${OUTDIR}/flux-screensaver-setup-v${version}.exe"
 InstallDir "$PROGRAMFILES64\${ORG}\${PRODUCT}"
-InstallDirRegKey HKCU "${REGKEY}" ""
+InstallDirRegKey HKCU "${REGKEY}" "Install_Dir"
 SetCompressor /SOLID lzma
 RequestExecutionLevel admin
 
