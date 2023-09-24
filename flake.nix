@@ -82,7 +82,7 @@
           mv $out/lib/libSDL2.dll.a $out/lib/libSDL2-static.dll.a
         '';
       });
-    in rec {
+    in {
       devShells = {
         default = pkgs.pkgsBuildHost.mkShell {
          # inputsFrom = [packages.default];
@@ -92,6 +92,7 @@
             fontconfig
             cmake
             alejandra
+            nsis
           ];
 
           RUSTFLAGS = "-L ${SDL2_static}/lib";
@@ -99,28 +100,49 @@
       };
 
       packages = {
-        default = craneLib.buildPackage {
-          src = ./windows;
-          release = true;
-          doCheck = false;
+        windows = rec {
+          default = installer;
 
-          buildInputs = [
-            pkgs.windows.pthreads
-            pkgs.windows.mingw_w64_pthreads
-            SDL2_static
-          ];
+          installer = pkgs.stdenvNoCC.mkDerivation {
+            name = "flux-screensaver-installer";
+            version = flux.version;
+            src = ./windows/installer;
 
-          CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
-          CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
-          # Link to the static SDL2 library and export the static GPU preference symbols
-          RUSTFLAGS = "-L ${SDL2_static}/lib -Zexport-executable-symbols";
+            buildInputs = with pkgs.pkgsBuildHost; [ nsis flux ];
 
-          # Change the extension to .scr (Windows screensaver)
-          postInstall = ''
-            if [[ $out != *"deps"* ]]; then
-              cp $out/bin/Flux.exe "$out/bin/Flux.scr"
-            fi
-          '';
+            installPhase = ''
+              mkdir -p $out/bin
+              ${pkgs.pkgsBuildHost.nsis}/bin/makensis \
+                -DDSTDIR=${flux}/bin/ \
+                -DOUTDIR=$out/bin \
+                -DVERSION=${flux.version} \
+                $src/setup.nsi
+            '';
+          };
+
+          flux = craneLib.buildPackage {
+            src = ./windows;
+            release = true;
+            doCheck = false;
+
+            buildInputs = [
+              pkgs.windows.pthreads
+              pkgs.windows.mingw_w64_pthreads
+              SDL2_static
+            ];
+
+            CARGO_BUILD_TARGET = "x86_64-pc-windows-gnu";
+            CARGO_TARGET_X86_64_PC_WINDOWS_GNU_LINKER = "${pkgs.stdenv.cc.targetPrefix}cc";
+            # Link to the static SDL2 library and export the static GPU preference symbols
+            RUSTFLAGS = "-L ${SDL2_static}/lib -Zexport-executable-symbols";
+
+            # Change the extension to .scr (Windows screensaver)
+            postInstall = ''
+              if [[ $out != *"deps"* ]]; then
+                cp $out/bin/Flux.exe "$out/bin/Flux.scr"
+              fi
+            '';
+          };
         };
       };
     }));

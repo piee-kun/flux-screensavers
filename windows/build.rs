@@ -25,7 +25,7 @@ fn main() {
         }
 
         resource
-            .set_icon("flux-screensaver.ico")
+            .set_icon("installer/flux-screensaver.ico")
             .set_manifest_file("flux-screensaver-windows.exe.manifest");
 
         if let Err(msg) = resource.compile() {
